@@ -43,7 +43,8 @@ start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_WAIT%"
 timeout /t 60 >nul
 :: 进门
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_ENTER%"
-
+:: 等待进门
+timeout /t 20 >nul
 echo [%time%] 启动 BetterGI 主程序... >> "%LOG_FILE%"
 :: 进入 BetterGI 目录再启动
 cd /d "%BTGI_DIR%"
