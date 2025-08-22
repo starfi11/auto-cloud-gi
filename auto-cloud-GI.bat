@@ -16,6 +16,7 @@ for /f "tokens=1,* delims==" %%A in ('findstr "=" "%CONFIG_FILE%"') do (
 :: 相对路径脚本（保持一致性）
 set "AHK_SCRIPT_QUEUE=%BAT_DIR%enter_genshin_queue.ahk"
 set "AHK_SCRIPT_BTGI=%BAT_DIR%change_btgi_window.ahk"
+set "AHK_SCRIPT_WAIT=%BAT_DIR%wait_until_enter.ahk"
 set "BAT_SEND_LOG=%BAT_DIR%send_wecom_log.bat"
 set "LOG_FILE=%BTGI_DIR%\log\my_log.txt"
 set "UTF8_LOG=%BTGI_DIR%\log\utf8log.txt"
@@ -33,10 +34,10 @@ start "" "%GI_EXE%"
 timeout /t 15 >nul
 
 echo [%time%] 启动排队点击脚本（enter_genshin_queue）... >> "%LOG_FILE%"
-start "" "%AHK_EXE%" "%AHK_SCRIPT_QUEUE%"
+start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_QUEUE%"
 
-:: 等待 1 分钟用于排队加载和选择原神
-timeout /t 60 >nul
+:: 等待云游戏排队
+start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_WAIT%"
 
 echo [%time%] 启动 BetterGI 主程序... >> "%LOG_FILE%"
 :: 进入 BetterGI 目录再启动
@@ -45,7 +46,7 @@ start "" "%BTGI_EXE%"
 timeout /t 5 >nul
 
 echo [%time%] 执行窗口选中点击脚本（change_btgi_window）... >> "%LOG_FILE%"
-start "" "%AHK_EXE%" "%AHK_SCRIPT_BTGI%"
+start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_BTGI%"
 timeout /t 5 >nul
 
 :: 等待 15 分钟用于执行一条龙
