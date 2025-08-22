@@ -16,21 +16,16 @@ try DllCall("SetProcessDPIAware")
 
 #NoEnv
 #SingleInstance Force
+#Include %A_ScriptDir%\local_config.ahk
+
 SendMode, Input
 SetBatchLines, -1
 SetTitleMatchMode, 2
 CoordMode, Mouse, Screen
 
-; ---- 可按需修改的常量 ----
-DelayMs := 1000                      ; 每次点击后的缓冲
-BTGI_WIN := "ahk_exe BetterGI.exe"   ; BTGI 窗口匹配（可换成标题关键字）
-SCROLL_TIMES := 80                   ; 兜底滚轮次数
-SCROLL_INTERVAL := 5                 ; 每档间隔(ms)
-YOffset := 30                        ; 点击Y坐标向下修正的像素量，ECS上偏移就从这里调
-
 ClickFixed(x, y, clicks := 1) {
     global YOffset, DelayMs
-    newY := y - YOffset
+    newY := y + YOffset
     Click, %x%, %newY%, %clicks%
     Sleep, %DelayMs%
 }
@@ -84,9 +79,14 @@ Sleep, %DelayMs%
 ; 防止没进门 点击 1263,616
 ClickFixed(1263, 616)
 Sleep, %DelayMs%
-; 防止没进门 点击 1263,616
-ClickFixed(1263, 616)
+; 防止没进门 点击
+ClickFixed(1263, 781)
 Sleep, 10000
-
+Sleep, %DelayMs%
+; 防止没进门 点击
+ClickFixed(1263, 781)
+Sleep, %DelayMs%
+; 防止没进门 点击
+ClickFixed(1263, 781)
 ExitApp
 

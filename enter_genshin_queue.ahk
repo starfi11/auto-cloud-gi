@@ -1,7 +1,5 @@
 ﻿CoordMode, Mouse, Screen
-
-; ---- 垂直偏移设置 ----
-YOffset := 30  ; ECS上向下偏移的问题从这里统一调整
+#Include %A_ScriptDir%\click_utils.ahk
 
 ClickFixed(x, y, clicks := 1) {
     global YOffset
