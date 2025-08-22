@@ -1,5 +1,5 @@
 CoordMode, Mouse, Screen
-#Include %A_ScriptDir%\local_config.ahk
+#Include %A_ScriptDir%\load_config.ahk
 
 ClickFixed(x, y, clicks := 1) {
     global YOffset

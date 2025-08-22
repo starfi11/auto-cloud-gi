@@ -16,7 +16,7 @@ try DllCall("SetProcessDPIAware")
 
 #NoEnv
 #SingleInstance Force
-#Include %A_ScriptDir%\local_config.ahk
+#Include %A_ScriptDir%\load_config.ahk
 
 SendMode, Input
 SetBatchLines, -1
