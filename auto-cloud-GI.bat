@@ -38,7 +38,8 @@ start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_QUEUE%"
 
 :: 等待云游戏排队
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_WAIT%"
-
+:: 等待游戏启动
+timeout /t 60 >nul
 echo [%time%] 启动 BetterGI 主程序... >> "%LOG_FILE%"
 :: 进入 BetterGI 目录再启动
 cd /d "%BTGI_DIR%"
