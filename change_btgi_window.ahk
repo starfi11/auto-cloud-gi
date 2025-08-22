@@ -61,7 +61,7 @@ ClickFixed(1263, 616)
 ClickFixed(716, 477, 2)
 
 Sleep, %DelayMs%
-
+Sleep, 10000
 ; 第二次切换到bettergi界面
 Send, {Alt down}{Tab}{Alt up}
 Sleep, %DelayMs%
