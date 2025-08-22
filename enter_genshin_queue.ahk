@@ -1,9 +1,9 @@
 ﻿CoordMode, Mouse, Screen
-#Include %A_ScriptDir%\click_utils.ahk
+#Include %A_ScriptDir%\local_config.ahk
 
 ClickFixed(x, y, clicks := 1) {
     global YOffset
-    newY := y - YOffset
+    newY := y + YOffset
     Click, %x%, %newY%, %clicks%
 }
 
