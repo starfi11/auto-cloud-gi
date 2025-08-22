@@ -2,9 +2,19 @@
 chcp 65001
 setlocal enabledelayedexpansion
 
-:: ----------- 配置项 -----------
-set "HOOK_KEY=xxxxxxxxxxxxxxxxxx"
-set "LOG_DIR=C:\Program Files\BetterGI\log"
+:: ========== 读取 config.ini ==========
+set "BAT_DIR=%~dp0"
+set "CONFIG_FILE=%BAT_DIR%config.ini"
+if not exist "%CONFIG_FILE%" (
+  echo 配置文件不存在: "%CONFIG_FILE%"
+  exit /b 1
+)
+for /f "tokens=1,* delims==" %%A in ('findstr "=" "%CONFIG_FILE%"') do (
+  set "key=%%A"
+  set "val=%%B"
+  set "!key!=!val!"
+)
+
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "TODAY=%%i"
 set "LOG_FILE=%LOG_DIR%\better-genshin-impact%TODAY%.log"
 
@@ -23,7 +33,7 @@ curl -s -X POST "https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?key=%H
   -H "Content-Type: multipart/form-data" ^
   -F "media=@%LOG_FILE%;type=application/octet-stream" > upload_result.json
 
-:: 提取 media_id 更稳的方式
+:: 提取 media_id
 for /f "delims=" %%a in ('powershell -NoProfile -Command ^
   "(Get-Content -Raw 'upload_result.json' | ConvertFrom-Json).media_id"') do set "MEDIA_ID=%%a"
 
@@ -34,7 +44,6 @@ if not defined MEDIA_ID (
     type upload_result.json
     exit /b 1
 )
-
 
 echo 上传成功，media_id: %MEDIA_ID%
 
@@ -48,7 +57,6 @@ echo   }
 echo }
 ) > body.json
 
-
 :: 发送文件消息
 echo 正在发送文件消息到微信群...
 
@@ -56,7 +64,7 @@ curl -s -X POST "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=%HOOK_KEY%
   -H "Content-Type: application/json" ^
   -d @body.json > send_result.json
 
-echo ✅ 文件消息发送完成
+echo 文件消息发送完成
 type send_result.json
 
 :: 清理临时文件
