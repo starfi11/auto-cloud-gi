@@ -30,20 +30,6 @@ ClickFixed(x, y, clicks := 1) {
     Sleep, %DelayMs%
 }
 
-Sleep, %DelayMs%
-; 防止没进门 点击 1263,616
-ClickFixed(1263, 616)
-Sleep, %DelayMs%
-; 防止没进门 点击
-ClickFixed(1263, 781)
-Sleep, 10000
-Sleep, %DelayMs%
-; 防止没进门 点击
-ClickFixed(1263, 781)
-Sleep, %DelayMs%
-; 防止没进门 点击
-ClickFixed(1263, 781)
-
 ; 0) 先聚焦到 BTGI
 if (BTGI_WIN != "") {
     WinActivate, %BTGI_WIN%

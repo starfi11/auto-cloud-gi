@@ -17,6 +17,7 @@ for /f "tokens=1,* delims==" %%A in ('findstr "=" "%CONFIG_FILE%"') do (
 set "AHK_SCRIPT_QUEUE=%BAT_DIR%enter_genshin_queue.ahk"
 set "AHK_SCRIPT_BTGI=%BAT_DIR%change_btgi_window.ahk"
 set "AHK_SCRIPT_WAIT=%BAT_DIR%wait_until_enter.ahk"
+set "AHK_SCRIPT_ENTER=%BAT_DIR%enter_door.ahk"
 set "BAT_SEND_LOG=%BAT_DIR%send_wecom_log.bat"
 set "LOG_FILE=%BTGI_DIR%\log\my_log.txt"
 set "UTF8_LOG=%BTGI_DIR%\log\utf8log.txt"
@@ -40,6 +41,9 @@ start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_QUEUE%"
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_WAIT%"
 :: 等待游戏启动
 timeout /t 60 >nul
+:: 进门
+start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_ENTER%"
+
 echo [%time%] 启动 BetterGI 主程序... >> "%LOG_FILE%"
 :: 进入 BetterGI 目录再启动
 cd /d "%BTGI_DIR%"
