@@ -63,8 +63,12 @@ ClickFixed(716, 477, 2)
 
 Sleep, %DelayMs%
 
-; ====== 第二次切到 BTGI（简化版：Alt+Tab 一次） ======
-SendInput, {Alt down}{Tab}{Alt up}
+; ====== 第二次切到 BTGI ======
+if (BTGI_WIN != "") {
+    WinRestore, %BTGI_WIN%
+    WinActivate, %BTGI_WIN%
+    WinWaitActive, %BTGI_WIN%,, 3
+}
 Sleep, %DelayMs%
 
 ; 7) 点击 579,473（带偏移）
