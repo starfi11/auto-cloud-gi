@@ -18,7 +18,7 @@ try DllCall("SetProcessDPIAware")
 #SingleInstance Force
 #Include %A_ScriptDir%\load_config.ahk
 
-SendMode, Input
+SendMode, Event
 SetBatchLines, -1
 SetTitleMatchMode, 2
 CoordMode, Mouse, Screen
@@ -63,12 +63,8 @@ ClickFixed(716, 477, 2)
 
 Sleep, %DelayMs%
 
-; ====== 第二次切到 BTGI ======
-if (BTGI_WIN != "") {
-    WinRestore, %BTGI_WIN%
-    WinActivate, %BTGI_WIN%
-    WinWaitActive, %BTGI_WIN%,, 3
-}
+; 第二次切换到bettergi界面
+Send, {Alt down}{Tab}{Alt up}
 Sleep, %DelayMs%
 
 ; 7) 点击 579,473（带偏移）
