@@ -101,7 +101,7 @@ winget install --id=Datronicsoft.SpacedeskDriver.Server -e
 
 ---
 
-### 5️⃣ 填写路径配置（在 `main_launcher.bat` 中）
+### 5️⃣ 填写路径配置（在 `config.ini` 中）
 
 根据实际路径修改以下项：
 
@@ -117,7 +117,8 @@ set BAT_SEND_LOG=...
 
 ### 6️⃣ 设置自动启动
 
-- 将 `main_launcher.bat` 放入计划任务或启动文件夹，配合阿里云 ECS 的自动开关机功能实现无人值守自动运行
+- 将 `auto-cloud-GI.bat` 放入计划任务或启动文件夹，配合阿里云 ECS 的自动开关机功能实现无人值守自动运行
+- 避免重复加入自启动中导致开机时脚本被执行多次导致异常
 
 ---
 
