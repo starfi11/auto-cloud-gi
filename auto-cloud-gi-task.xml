@@ -3,7 +3,7 @@
   <RegistrationInfo>
     <Date>2025-08-24T11:00:00</Date>
     <Author>auto-cloud-gi</Author>
-    <Description>BetterGI云原神自动脚本</Description>
+    <Description>BetterGI云游戏自动脚本</Description>
   </RegistrationInfo>
   <Triggers>
     <BootTrigger>

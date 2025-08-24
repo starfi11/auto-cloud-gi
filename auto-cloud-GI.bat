@@ -30,7 +30,7 @@ if not exist "%BTGI_DIR%\log" (
 :: 清空旧日志
 del "%LOG_FILE%" >nul 2>&1
 
-echo [%time%] 启动云原神... >> "%LOG_FILE%"
+echo [%time%] 启动云游戏... >> "%LOG_FILE%"
 start "" "%GI_EXE%"
 timeout /t 15 >nul
 
