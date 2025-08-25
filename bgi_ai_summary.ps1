@@ -1,4 +1,4 @@
-param(
+﻿param(
   # 允许从 BAT 传，也可不传（不传则用 $env:LOG_FILE）
   [string]$LogPath
 )
