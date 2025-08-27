@@ -64,5 +64,9 @@ echo [%time%] 上传日志到企业微信... >> "%LOG_FILE%"
 call "%BAT_SEND_LOG%"
 
 :: === AI日志简报：把当日 LOG 发送到大模型，结果回传企业微信 ===
-::powershell -NoProfile -ExecutionPolicy Bypass -File "%BAT_DIR%bgi_ai_summary.ps1" -LogPath "%LOG_FILE%"
-::if errorlevel 1 echo [WARN] AI简报发送失败
+pwsh -NoProfile -ExecutionPolicy Bypass -File "%BAT_DIR%bgi_ai_summary.ps1"
+if errorlevel 1 (
+    echo [WARN] AI简报发送失败
+) else (
+    echo [OK] AI简报已发送
+)
