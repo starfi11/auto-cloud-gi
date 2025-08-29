@@ -30,6 +30,9 @@ if not exist "%BTGI_DIR%\log" (
 :: 清空旧日志
 del "%LOG_FILE%" >nul 2>&1
 
+:: 开始截图采样
+start powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0screen_sampler.ps1"
+
 echo [%time%] 启动云游戏... >> "%LOG_FILE%"
 start "" "%GI_EXE%"
 timeout /t 15 >nul
@@ -70,3 +73,5 @@ if errorlevel 1 (
 ) else (
     echo [OK] AI简报已发送
 )
+:: 杀掉截图采样
+for /f "tokens=2 delims==;" %%P in ('wmic process where "Name='powershell.exe' and CommandLine like '%%screen_sampler.ps1%%'" get ProcessId /value ^| find "="') do taskkill /f /pid %%P
