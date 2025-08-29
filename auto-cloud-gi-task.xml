@@ -8,7 +8,7 @@
   <Triggers>
     <BootTrigger>
       <Enabled>true</Enabled>
-      <Delay>PT30S</Delay>
+      <Delay>PT60S</Delay>
     </BootTrigger>
   </Triggers>
   <Principals>
