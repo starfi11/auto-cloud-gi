@@ -32,6 +32,7 @@
 | `config_example.ini`      | 配置示例文件                                              |
 | `auto-cloud-gi-task.xml`  | 注册任务的 XML                                            |
 | `bgi_ai_summary.ps1`      | 调用大模型分析当天的 bettergi 日志并推送企业微信          |
+| `screen_sampler.ps1`      | 每隔一定时间采样截图，实际使用时需要关闭该功能            |
 
 ---
 
@@ -83,7 +84,7 @@ acs-plugin-manager --fetchTimeout 0 --exec --plugin gpu_grid_driver_install
 #### ✅ 安装 TightVNC
 
 - 本地安装 Viewer
-- 远程服务器安装 Server 并配置开机自启、无密码登录
+- 远程服务器安装 Server
 
 #### ✅ 安装虚拟显示器驱动（Spacedesk）
 
@@ -124,6 +125,7 @@ set BAT_SEND_LOG=...
 
 - 使用 **Windows 任务计划程序** 配合提供的 `auto-cloud-gi-task.xml` 文件来设置自动启动
 - Win + R → `taskschd.msc`，使用 XML 文件导入任务
+- 通过配置注册表项 `AutoAdminLogon=1`，并设置 `DefaultUserName` 与 `DefaultPassword`，实现系统启动后自动跳过登录界面并直接进入桌面
 
 ---
 
@@ -135,8 +137,13 @@ set BAT_SEND_LOG=...
   ```ini
   AI_BASE_URL=https://dashscope.aliyuncs.com/compatible/v1
   AI_MODEL=qwen-turbo
-  AI_API_KEY=sk-xxxxxx
+  AI_API_KEY=sk-xxxxxx 
   ```
+
+### 8️⃣配置 bettergi
+
+- 手动将BETTERGI的截图器切换为windowsgraphicscapture
+- 根据需要修改一条龙配置
 
 ## 🛠 已知问题 / 注意事项
 
@@ -149,6 +156,7 @@ set BAT_SEND_LOG=...
 - 避免为入口 BAT 配置了复数个启动自动执行，这会导致执行异常
 - 保证自动化执行是在操作系统启动稳定后（XML中已配置延迟执行）
 - 建议在合适的时间定时执行
+- 建议在除枫丹外的区域领取冒险家协会的每日奖励
 
 ---
 
