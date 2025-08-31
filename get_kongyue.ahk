@@ -13,5 +13,6 @@ ClickFixed(1539, 1011, 2)
 Sleep, 1000
 ClickFixed(1539, 1011, 2)
 Sleep, 1000
-
+Sleep, 5000
+ClickFixed(1538, 1502, 2)
 ExitApp
