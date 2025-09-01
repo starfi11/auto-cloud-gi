@@ -9,7 +9,9 @@ ClickFixed(x, y, clicks := 1) {
 
 ; ===== 点击逻辑 =====
 ClickFixed(1538, 1502) ; 领取每日赠送时长
-Sleep, 1000
+Sleep, 2000
+ClickFixed(1545, 1552) ; 领取每日赠送时长
+Sleep, 2000
 ClickFixed(1395, 843)  ; 点击“开始游戏”
 Sleep, 1000
 

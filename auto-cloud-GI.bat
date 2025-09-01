@@ -51,12 +51,12 @@ start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_ENTER%"
 timeout /t 40 >nul
 :: 摇空月
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_KONGYUE%"
-
+timeout /t 10 >nul
 echo [%time%] 启动 BetterGI 主程序... >> "%LOG_FILE%"
 :: 进入 BetterGI 目录再启动
 cd /d "%BTGI_DIR%"
 start "" "%BTGI_EXE%"
-timeout /t 5 >nul
+timeout /t 10 >nul
 
 echo [%time%] 执行窗口选中点击脚本（change_btgi_window）... >> "%LOG_FILE%"
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_BTGI%"

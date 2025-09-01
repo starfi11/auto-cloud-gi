@@ -10,9 +10,12 @@ ClickFixed(x, y, clicks := 1) {
 ; ===== 摇空月祝福脚本逻辑 =====
 
 ClickFixed(1539, 1011, 2)
-Sleep, 1000
+Sleep, 3000
 ClickFixed(1539, 1011, 2)
-Sleep, 1000
+Sleep, 3000
+ClickFixed(1676, 1039, 2)
+Sleep, 5000
+ClickFixed(1676, 1039, 2)
 Sleep, 5000
 ClickFixed(1538, 1502, 2)
 ExitApp
