@@ -14,12 +14,13 @@ for /f "tokens=1,* delims==" %%A in ('findstr "=" "%CONFIG_FILE%"') do (
 )
 
 :: 相对路径脚本（保持一致性）
-set "AHK_SCRIPT_QUEUE=%BAT_DIR%enter_genshin_queue.ahk"
+set "AHK_SCRIPT_QUEUE=%BAT_DIR%enter_genshin_queue_nowait.ahk"
 set "AHK_SCRIPT_BTGI=%BAT_DIR%change_btgi_window.ahk"
 set "AHK_SCRIPT_WAIT=%BAT_DIR%wait_until_enter.ahk"
 set "AHK_SCRIPT_ENTER=%BAT_DIR%enter_door.ahk"
 set "AHK_SCRIPT_KONGYUE=%BAT_DIR%get_kongyue.ahk"
 set "BAT_SEND_LOG=%BAT_DIR%send_wecom_log.bat"
+set "BAT_UPLOAD=%BAT_DIR%upload_quark.bat"
 set "LOG_FILE=%BTGI_DIR%\log\my_log.txt"
 set "UTF8_LOG=%BTGI_DIR%\log\utf8log.txt"
 
@@ -32,7 +33,7 @@ if not exist "%BTGI_DIR%\log" (
 del "%LOG_FILE%" >nul 2>&1
 
 :: 开始截图采样
-:: start powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0screen_sampler.ps1"
+start powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0screen_sampler.ps1"
 
 echo [%time%] 启动云游戏... >> "%LOG_FILE%"
 start "" "%GI_EXE%"
@@ -78,4 +79,5 @@ if errorlevel 1 (
     echo [OK] AI简报已发送
 )
 :: 杀掉截图采样
-:: for /f "tokens=2 delims==;" %%P in ('wmic process where "Name='powershell.exe' and CommandLine like '%%screen_sampler.ps1%%'" get ProcessId /value ^| find "="') do taskkill /f /pid %%P
+for /f "tokens=2 delims==;" %%P in ('wmic process where "Name='powershell.exe' and CommandLine like '%%screen_sampler.ps1%%'" get ProcessId /value ^| find "="') do taskkill /f /pid %%P
+call "%BAT_UPLOAD%"
