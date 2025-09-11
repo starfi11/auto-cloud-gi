@@ -13,7 +13,7 @@ set "ZIP_PATH=C:\Users\Administrator\Desktop\screens\%DATESTR%.zip"
 powershell -Command "Compress-Archive -Path '%SRC_DIR%\*' -DestinationPath '%ZIP_PATH%' -Force"
 
 :: === 打开夸克网盘（Edge 浏览器）===
-start msedge "https://pan.quark.cn"
+start "" /MAX msedge "https://pan.quark.cn"
 
 :: === 等待网页加载，启动 AHK 脚本 ===
 timeout /t 5 >nul

@@ -33,7 +33,10 @@ if not exist "%BTGI_DIR%\log" (
 del "%LOG_FILE%" >nul 2>&1
 
 :: 开始截图采样
-start powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0screen_sampler.ps1"
+start "" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0screen_sampler.ps1"
+for /f "tokens=2" %%P in ('tasklist /FI "IMAGENAME eq powershell.exe" /FO CSV /NH ^| findstr "screen_sampler.ps1"') do (
+    echo %%~P > "%~dp0sampler.pid"
+)
 
 echo [%time%] 启动云游戏... >> "%LOG_FILE%"
 start "" "%GI_EXE%"
@@ -79,5 +82,6 @@ if errorlevel 1 (
     echo [OK] AI简报已发送
 )
 :: 杀掉截图采样
-for /f "tokens=2 delims==;" %%P in ('wmic process where "Name='powershell.exe' and CommandLine like '%%screen_sampler.ps1%%'" get ProcessId /value ^| find "="') do taskkill /f /pid %%P
+for /f %%P in (%~dp0sampler.pid) do taskkill /f /pid %%P
+del "%~dp0sampler.pid"
 call "%BAT_UPLOAD%"
