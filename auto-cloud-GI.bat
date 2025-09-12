@@ -84,4 +84,8 @@ if errorlevel 1 (
 :: 杀掉截图采样
 for /f %%P in (%~dp0sampler.pid) do taskkill /f /pid %%P
 del "%~dp0sampler.pid"
+:: 上传
 call "%BAT_UPLOAD%"
+:: 删除本地资源
+del /f /q "%ZIP_PATH%"
+rmdir /s /q "%SRC_DIR%"

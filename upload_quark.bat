@@ -22,9 +22,5 @@ start "" "%~dp0upload_quark.ahk"
 :: 等待上传完成
 timeout /t 120
 
-:: 上传成功后删除本地资源
-del /f /q "%ZIP_PATH%"
-rmdir /s /q "%SRC_DIR%"
-
 endlocal
 pause
