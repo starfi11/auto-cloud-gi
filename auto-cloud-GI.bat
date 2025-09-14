@@ -23,6 +23,8 @@ set "BAT_SEND_LOG=%BAT_DIR%send_wecom_log.bat"
 set "BAT_UPLOAD=%BAT_DIR%upload_quark.bat"
 set "LOG_FILE=%BTGI_DIR%\log\my_log.txt"
 set "UTF8_LOG=%BTGI_DIR%\log\utf8log.txt"
+set "SRC_DIR=C:\Users\Administrator\Desktop\screens\%DATESTR%"
+set "ZIP_PATH=C:\Users\Administrator\Desktop\screens\%DATESTR%.zip"
 
 :: 确保日志目录存在
 if not exist "%BTGI_DIR%\log" (
