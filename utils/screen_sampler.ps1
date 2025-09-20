@@ -1,9 +1,9 @@
 ﻿# 定时截图采样（双击可运行版）
-# 保存到 C:\ProgramData\auto-cloud-GI\screens\YYYYMMDD\HHmmss.fff.png
 
-$OutRoot = "C:\Users\Administrator\Desktop\screens"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$RootDir   = Resolve-Path (Join-Path $ScriptDir "..")
+$OutRoot   = Join-Path $RootDir "logs\screens"
 $IntervalSec = 10
-
 $ErrorActionPreference = "Stop"
 
 Add-Type -AssemblyName System.Drawing

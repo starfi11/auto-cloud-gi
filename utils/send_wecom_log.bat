@@ -4,11 +4,13 @@ setlocal enabledelayedexpansion
 
 :: ========== 读取 config.ini ==========
 set "BAT_DIR=%~dp0"
-set "CONFIG_FILE=%BAT_DIR%config.ini"
+set "ROOT_DIR=%BAT_DIR%.."
+set "CONFIG_FILE=%ROOT_DIR%\config.ini"
 if not exist "%CONFIG_FILE%" (
   echo 配置文件不存在: "%CONFIG_FILE%"
   exit /b 1
 )
+
 for /f "tokens=1,* delims==" %%A in ('findstr "=" "%CONFIG_FILE%"') do (
   set "key=%%A"
   set "val=%%B"

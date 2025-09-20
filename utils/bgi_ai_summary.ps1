@@ -6,8 +6,8 @@ $ErrorActionPreference = 'Stop'
 
 # ================= 读取 config.ini 到进程环境 =================
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$configPath = Join-Path $ScriptDir 'config.ini'
-if (-not (Test-Path $configPath)) { throw "未找到配置文件：$configPath" }
+$RootDir    = Resolve-Path (Join-Path $ScriptDir "..")
+$configPath = Join-Path $RootDir 'config.ini'
 
 Get-Content $configPath -Encoding UTF8 | ForEach-Object {
   $line = $_.Trim()

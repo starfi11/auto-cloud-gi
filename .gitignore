@@ -1,4 +1,7 @@
 config.ini
 send_result.json
+utils/send_result.json
 auto-cloud-GI.bat - 快捷方式
 test.ps1
+logs
+driver

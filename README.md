@@ -140,7 +140,7 @@ set BAT_SEND_LOG=...
   AI_API_KEY=sk-xxxxxx 
   ```
 
-### 8️⃣配置 bettergi
+### 8️⃣ 配置 bettergi
 
 - 手动将BETTERGI的截图器切换为windowsgraphicscapture
 - 根据需要修改一条龙配置
