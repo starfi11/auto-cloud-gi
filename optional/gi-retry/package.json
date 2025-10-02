@@ -1,0 +1,10 @@
+{
+  "name": "gi-retry",
+  "version": "1.0.0",
+  "dependencies": {
+    "tablestore": "^5.5.1",
+    "@alicloud/openapi-client": "^0.4.9",
+    "@alicloud/fnf20190315": "^1.0.0",
+    "dayjs": "^1.11.13"
+  }
+}

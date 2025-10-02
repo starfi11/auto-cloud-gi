@@ -5,3 +5,7 @@ auto-cloud-GI.bat - 快捷方式
 test.ps1
 logs
 driver
+/optional/gi-retry/.npm-cache/
+/optional/gi-retry/node_modules/
+/optional/gi-retry/package-lock.json
+/optional/gi-retry/gi-retry.zip

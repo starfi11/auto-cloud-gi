@@ -1,0 +1,7 @@
+{
+  "REGION": "cn-shanghai",
+  "FLOW_NAME": "<your-fnf-flow-name>",
+  "ECS_INSTANCE_ID": "<i-xxxxxxxxxxxx>",
+  "OTS_ENDPOINT": "https://<ots-instance>.<region>.ots.aliyuncs.com",
+  "OTS_INSTANCE": "<your-ots-instance-name>"
+}
