@@ -174,7 +174,7 @@ if ($EnableFcRetry) {
 }
 
 
-# ================= FC 签名与调用函数 ==================
+# ================= 修正版：FC HTTP 触发器 V3 签名与调用 ==================
 function Set-ImdsSts {
   try {
     $role = (Invoke-RestMethod -Uri "http://100.100.100.200/latest/meta-data/RAM/security-credentials/").Trim()
@@ -183,12 +183,12 @@ function Set-ImdsSts {
     $env:ALIBABA_CLOUD_ACCESS_KEY_ID     = $c.AccessKeyId
     $env:ALIBABA_CLOUD_ACCESS_KEY_SECRET = $c.AccessKeySecret
     $env:ALIBABA_CLOUD_SECURITY_TOKEN    = $c.SecurityToken
-    $env:ALIBABA_CLOUD_STS_EXPIRES       = $c.Expiration  # ISO8601
+    $env:ALIBABA_CLOUD_STS_EXPIRES       = $c.Expiration
     return $true
   } catch { return $false }
 }
 
-# 每次启动先确保可用；若已有且未临期(<5分钟)则复用
+# 若临近过期则刷新 STS
 $need = $true
 if ($env:ALIBABA_CLOUD_STS_EXPIRES) {
   try {
@@ -198,68 +198,133 @@ if ($env:ALIBABA_CLOUD_STS_EXPIRES) {
 }
 if ($need) { if (-not (Set-ImdsSts)) { throw "无法从 IMDS 获取 STS 凭证" } }
 
-
-function Get-HashHex([byte[]]$bytes) {
-  $sha = [System.Security.Cryptography.SHA256]::Create()
-  ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") }) -join ''
+# RFC3986 严格编码
+function Encode-RFC3986([string]$s) {
+  $bytes = [Text.Encoding]::UTF8.GetBytes($s)
+  $sb = New-Object System.Text.StringBuilder
+  foreach ($b in $bytes) {
+    $ch = [char]$b
+    if ( ($b -ge 0x30 -and $b -le 0x39) -or ($b -ge 0x41 -and $b -le 0x5A) -or
+         ($b -ge 0x61 -and $b -le 0x7A) -or $ch -in @('-', '.', '_', '~') ) {
+      [void]$sb.Append($ch)
+    } else {
+      [void]$sb.Append(('%{0:X2}' -f $b))
+    }
+  }
+  $sb.ToString()
 }
 
-function Get-HmacHex([string]$data, [string]$key) {
-  $h = New-Object System.Security.Cryptography.HMACSHA256([Text.Encoding]::UTF8.GetBytes($key))
-  ($h.ComputeHash([Text.Encoding]::UTF8.GetBytes($data)) | ForEach-Object { $_.ToString("x2") }) -join ''
-}
-
-function Get-AcsAuthorization([string]$Method, [string]$Url, [byte[]]$BodyBytes, [hashtable]$ExtraHeaders, [string]$Ak, [string]$Sk) {
+function Get-Acs3Authorization(
+  [string]$Method,[string]$Url,[byte[]]$Body,[hashtable]$Headers,[string]$Ak,[string]$Sk
+) {
   $u = [Uri]$Url
   $methodUp = $Method.ToUpperInvariant()
 
-  # CanonicalURI（按官方示例，仅将 $ 替换为 %24）
-  $canonicalUri = $u.AbsolutePath.Replace('$','%24')
+  # 1) CanonicalURI：逐段编码；确保 $ → %24
+  $rawSegs = $u.AbsolutePath.Split('/') | ForEach-Object { if ($_ -ne '') { $_ } }
+  if ($rawSegs.Count -eq 0) { $canonUri = '/' }
+  else {
+    $encSegs = $rawSegs | ForEach-Object { Encode-RFC3986 $_ }
+    $canonUri = '/' + ($encSegs -join '/')
+  }
+  $canonUri = $canonUri -replace '\$', '%24'
 
-  # CanonicalQuery（键名按字典序；RFC3986 编码）
+  # 2) CanonicalQueryString
   $qs = if ($u.Query.StartsWith('?')) { $u.Query.Substring(1) } else { $u.Query }
-  $pairs = @()
+  $qDict = @{}
   if ($qs) {
-    foreach ($kv in $qs -split '&') {
-      if ($kv -eq '') { continue }
-      $sp = $kv.Split('=',2)
-      $k = [Uri]::EscapeDataString($sp[0])
-      $v = if ($sp.Count -gt 1) { [Uri]::EscapeDataString($sp[1]) } else { '' }
-      $pairs += "$k=$v"
+    foreach ($pair in $qs -split '&') {
+      if ($pair -eq '') { continue }
+      $kv = $pair.Split('=',2)
+      $k  = [Uri]::UnescapeDataString($kv[0])
+      $v  = if ($kv.Count -gt 1) { [Uri]::UnescapeDataString($kv[1]) } else { '' }
+      if (-not $qDict.ContainsKey($k)) { $qDict[$k] = @() }
+      $qDict[$k] += $v
     }
   }
-  $canonicalQuery = ($pairs | Sort-Object) -join '&'
-
-  # Headers：必须包含 host、content-type、x-acs-date；有 STS 时再含 x-acs-security-token
-  $hdr = @{
-    'host'      = $u.Host
-    'content-type' = 'text/plain; charset=utf-8'
-    'x-acs-date'   = $ExtraHeaders['x-acs-date']
+  $qLines = @()
+  foreach ($k in ($qDict.Keys | Sort-Object)) {
+    foreach ($v in ($qDict[$k] | Sort-Object)) {
+      $qLines += ("{0}={1}" -f (Encode-RFC3986 $k), (Encode-RFC3986 $v))
+    }
   }
-  if ($ExtraHeaders.ContainsKey('x-acs-security-token') -and $ExtraHeaders['x-acs-security-token']) {
-    $hdr['x-acs-security-token'] = $ExtraHeaders['x-acs-security-token']
-  }
-  $signedHeaders = ($hdr.Keys | Sort-Object) -join ';'
-  $canonicalHeaders = ($hdr.Keys | Sort-Object | ForEach-Object { $_ + ':' + ($hdr[$_].ToString().Trim()) }) -join "`n"
-  if ($canonicalHeaders) { $canonicalHeaders += "`n" }
+  $canonQuery = ($qLines -join '&')
 
-  $payloadHash = Get-HashHex $BodyBytes
+  # 3) 计算 Body Hash，填入头，参与签名
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try { $payloadHash = ($sha.ComputeHash($Body) | ForEach-Object { $_.ToString("x2") }) -join '' }
+  finally { $sha.Dispose() }
+  $Headers['x-acs-content-sha256'] = $payloadHash
 
-  $canonicalRequest = @(
-    $methodUp,
-    $canonicalUri,
-    $canonicalQuery,
-    $canonicalHeaders,
-    $signedHeaders,
-    $payloadHash
-  ) -join "`n"
+  # 4) CanonicalHeaders + SignedHeaders
+  $h = @{}
+  foreach ($k in $Headers.Keys) { $h[$k.ToLowerInvariant()] = ($Headers[$k]).ToString().Trim() }
 
-  $stringToSign = @(
-    'ACS3-HMAC-SHA256',
-    $hdr['x-acs-date'],
-    (Get-HashHex ([Text.Encoding]::UTF8.GetBytes($canonicalRequest)))
-  ) -join "`n"
+  # host 含端口（非默认端口）
+  $hostHeader = $u.Host
+  if (-not $u.IsDefaultPort -and $u.Port -gt 0) { $hostHeader = "${hostHeader}:$($u.Port)" }
+  $h['host'] = $hostHeader
 
-  $signature = Get-HmacHex $stringToSign $Sk
-  "ACS3-HMAC-SHA256 Credential=$Ak, SignedHeaders=$signedHeaders, Signature=$signature"
+  $signedHeaderNames = @('host','x-acs-date','x-acs-content-sha256')
+  if ($h.ContainsKey('x-acs-security-token') -and $h['x-acs-security-token']) { $signedHeaderNames += 'x-acs-security-token' }
+  $signedHeaderNames = $signedHeaderNames | Sort-Object
+
+  $canonHeaders = ($signedHeaderNames | ForEach-Object { "{0}:{1}`n" -f $_, $h[$_] }) -join ''
+  $signedHeaders = ($signedHeaderNames -join ';')
+
+  # 5) CanonicalRequest
+  $canonicalRequest = ($methodUp + "`n" + $canonUri + "`n" + $canonQuery + "`n" + $canonHeaders + "`n" + $signedHeaders + "`n" + $payloadHash)
+
+  # 6) StringToSign 与 Signature（hex 小写）
+  $sha2 = [System.Security.Cryptography.SHA256]::Create()
+  try { $hashedCanon = ($sha2.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonicalRequest)) | ForEach-Object { $_.ToString("x2") }) -join '' }
+  finally { $sha2.Dispose() }
+  $stringToSign = "ACS3-HMAC-SHA256`n$hashedCanon"
+
+  $hmac = [System.Security.Cryptography.HMACSHA256]::new([byte[]][Text.Encoding]::UTF8.GetBytes($Sk))
+  try { $sigHex = ($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($stringToSign)) | ForEach-Object { $_.ToString("x2") }) -join '' }
+  finally { $hmac.Dispose() }
+
+  "ACS3-HMAC-SHA256 Credential=$Ak,SignedHeaders=$signedHeaders,Signature=$sigHex"
 }
+
+# ================= 实际调用 ==================
+Write-Host "[DBG] 准备调用 FC..."
+$url = $env:FC_URL
+$ak  = $env:ALIBABA_CLOUD_ACCESS_KEY_ID
+$sk  = $env:ALIBABA_CLOUD_ACCESS_KEY_SECRET
+$sts = $env:ALIBABA_CLOUD_SECURITY_TOKEN
+
+$payloadObj = @{ text = $summary }
+$bodyJson   = $payloadObj | ConvertTo-Json -Depth 5
+$bodyBytes  = [Text.Encoding]::UTF8.GetBytes($bodyJson)
+
+# 头部（与签名保持一致）
+$headers = @{
+  'x-acs-date' = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+  'Content-Type' = 'application/json; charset=utf-8'
+}
+if ($sts) { $headers['x-acs-security-token'] = $sts }
+
+$auth = Get-Acs3Authorization -Method 'POST' -Url $url -Body $bodyBytes -Headers $headers -Ak $ak -Sk $sk
+
+$hc  = [System.Net.Http.HttpClient]::new()
+$req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $url)
+
+$content = [System.Net.Http.ByteArrayContent]::new([byte[]]$bodyBytes)
+$content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new("application/json")
+$content.Headers.ContentType.CharSet = "utf-8"
+$req.Content = $content
+
+# 附加头（与签名一致）
+$req.Headers.TryAddWithoutValidation('x-acs-date', $headers['x-acs-date']) | Out-Null
+$req.Headers.TryAddWithoutValidation('x-acs-content-sha256', $headers['x-acs-content-sha256']) | Out-Null
+if ($sts) { $req.Headers.TryAddWithoutValidation('x-acs-security-token', $sts) | Out-Null }
+$req.Headers.TryAddWithoutValidation('Authorization', $auth) | Out-Null
+
+$resp = $hc.SendAsync($req).Result
+$respText = ''
+try { $respText = $resp.Content.ReadAsStringAsync().Result } catch {}
+Write-Host "[DBG] FC resp status: $($resp.StatusCode)"
+if ($respText) { Write-Host "[DBG] FC resp body: $respText" }
+if ($resp.IsSuccessStatusCode) { Write-Information "[OK] 已上送到 FC" } else { Write-Warning "[WARN] 上送 FC 失败 $($resp.StatusCode)" }

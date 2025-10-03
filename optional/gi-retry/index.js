@@ -16,7 +16,8 @@ const {
 function todayStr() { return dayjs().tz(DATE_TZ).format('YYYY-MM-DD'); }
 
 function parseText(req) {
-  const ct = (req.headers['content-type'] || '').toLowerCase();
+  const h = req.headers || {};
+  const ct = (h['content-type'] || h['Content-Type'] || '').toLowerCase();
   const raw = req.body && req.body.length ? req.body.toString('utf8') : '';
   if (ct.includes('application/json')) {
     try { const o = JSON.parse(raw); return o.text || o.content || raw; } catch { return raw; }
@@ -54,7 +55,6 @@ async function otsTryIncrement(client, pk, today, kmax) {
     return true;
   } catch (_) { /* fallthrough */ }
 
-  // 跨日/首写：仅当 last_retry_date != today
   const NE = new TableStore.SingleColumnCondition('last_retry_date', today, TableStore.ComparatorType.NOT_EQUAL, true);
   try {
     await client.updateRow({
@@ -92,40 +92,50 @@ async function startFlow(client) {
   return client.startExecution(req);
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
+// 兼容各种 req.body 形态
+function getBody(req) {
+  if (!req || req.body == null) return Buffer.alloc(0);
+  const b = req.body;
+  if (Buffer.isBuffer(b)) return b;
+  if (typeof b === 'string') {
+    const base64 = req.isBase64Encoded === true || req.isBase64 === true;
+    return Buffer.from(b, base64 ? 'base64' : 'utf8');
+  }
+  if (typeof b === 'object') return Buffer.from(JSON.stringify(b), 'utf8');
+  return Buffer.from(String(b), 'utf8');
 }
 
-// Web 函数入口（平台签名在网关已完成）
+// 统一发送（HTTP 返回对象）
+function send(_, code, obj) {
+  return {
+    statusCode: code,
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(obj),
+  };
+}
+
+// Web 函数入口
 module.exports.handler = async (req, res, context) => {
   try {
-    if (!req.body) req.body = await readBody(req);
+    // 关键改动：不再读流，直接规范化 body
+    req.body = getBody(req);
 
     const msg = parseText(req);
     if (!isException(msg)) {
-      res.setStatusCode(200); res.setHeader('content-type', 'application/json');
-      return res.send(JSON.stringify({ ok: true, skipped: true }));
+      return send(res, 200, { ok: true, skipped: true });
     }
 
     const ots = otsClient(context);
     const ok = await otsTryIncrement(ots, process.env.RETRY_KEY || 'global', todayStr(), Number(K_MAX));
     if (!ok) {
-      res.setStatusCode(200); res.setHeader('content-type', 'application/json');
-      return res.send(JSON.stringify({ ok: true, quota_exceeded: true }));
+      return send(res, 200, { ok: true, quota_exceeded: true });
     }
 
     const fnf = fnfClient(context);
     await startFlow(fnf);
 
-    res.setStatusCode(200); res.setHeader('content-type', 'application/json');
-    return res.send(JSON.stringify({ ok: true, triggered: true }));
+    return send(res, 200, { ok: true, triggered: true });
   } catch (err) {
-    res.setStatusCode(500); res.setHeader('content-type', 'application/json');
-    return res.send(JSON.stringify({ ok: false, error: String((err && err.message) || err) }));
+    return send(res, 500, { ok: false, error: String((err && err.message) || err) });
   }
 };
