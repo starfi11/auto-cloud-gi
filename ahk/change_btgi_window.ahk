@@ -37,11 +37,12 @@ if (BTGI_WIN != "") {
 }
 Sleep, %DelayMs%
 
-; 1) 点击 1130,825
-ClickFixed(1130, 825)
+; 1)
+; 已废弃操作（无副作用的点击取消更新） 
+; ClickFixed(ClickPointX_BtgiOpenCaptureMenu, ClickPointY_BtgiOpenCaptureMenu)
 
-; 2) 点击 1345,554
-ClickFixed(1345, 554)
+; 2) 展开捕获菜单
+ClickFixed(ClickPointX_BtgiExpandList, ClickPointY_BtgiExpandList)
 
 ; 3) 下滑到底（End、Ctrl+End + 滚轮兜底）
 Send, {End}
@@ -54,11 +55,11 @@ Loop, %SCROLL_TIMES% {
 }
 Sleep, %DelayMs%
 
-; 4) 点击 1263,616
-ClickFixed(1263, 616)
+; 4) 选择捕获窗口
+ClickFixed(ClickPointX_BtgiPickListItem, ClickPointY_BtgiPickListItem)
 
 ; 5) 双击 716,477（BTGI 选中游戏并把焦点放回游戏）
-ClickFixed(716, 477, 2)
+ClickFixed(ClickPointX_BtgiFocusGame, ClickPointY_BtgiFocusGame, 2)
 
 Sleep, %DelayMs%
 Sleep, 10000
@@ -66,12 +67,12 @@ Sleep, 10000
 Send, {Alt down}{Tab}{Alt up}
 Sleep, %DelayMs%
 
-; 7) 点击 579,473（带偏移）
-ClickFixed(579, 473)
+; 7) 切换到左侧栏的一条龙
+ClickFixed(ClickPointX_BtgiStartDragon1, ClickPointY_BtgiStartDragon1)
 Sleep, %DelayMs%
 
-; 8) 点击 857,319（带偏移）
-ClickFixed(857, 319)
+; 8) 启动一条龙
+ClickFixed(ClickPointX_BtgiStartDragon2, ClickPointY_BtgiStartDragon2)
 
 ExitApp
 

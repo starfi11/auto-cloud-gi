@@ -8,13 +8,13 @@ ClickFixed(x, y, clicks := 1) {
 }
 
 ; ===== 点击逻辑 =====
-ClickFixed(912, 843)   ; 领取每日赠送时长
+ClickFixed(ClickPointX_ClaimGift, ClickPointY_ClaimGift)   ; 领取每日赠送时长
 Sleep, 2000
-ClickFixed(912, 843)   ; 领取每日赠送时长
+ClickFixed(ClickPointX_ClaimGift, ClickPointY_ClaimGift)   ; 领取每日赠送时长
 Sleep, 2000
-ClickFixed(1395, 843)  ; 点击“开始游戏”
+ClickFixed(ClickPointX_StartGame, ClickPointY_StartGame)   ; 点击“开始游戏”
 Sleep, 5000
 
-ClickFixed(872, 507)   ; 点击“优先队列”
+ClickFixed(ClickPointX_QueueQuick, ClickPointY_QueueQuick) ; 点击“优先队列”
 
 ExitApp

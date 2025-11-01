@@ -9,13 +9,13 @@ ClickFixed(x, y, clicks := 1) {
 
 ; ===== 进门脚本逻辑 =====
 
-ClickFixed(960, 1005)
+ClickFixed(ClickPointX_DoorEnter, ClickPointY_DoorEnter)
 Sleep, 1000
 
-ClickFixed(960, 1005)
+ClickFixed(ClickPointX_DoorEnter, ClickPointY_DoorEnter)
 Sleep, 1000
 
-ClickFixed(960, 1005)
+ClickFixed(ClickPointX_DoorEnter, ClickPointY_DoorEnter)
 Sleep, 1000
 
 ExitApp

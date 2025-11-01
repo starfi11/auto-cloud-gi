@@ -174,7 +174,7 @@ if ($EnableFcRetry) {
 }
 
 
-# ================= 修正版：FC HTTP 触发器 V3 签名与调用 ==================
+# ================= FC HTTP 触发器 V3 签名与调用 ==================
 function Set-ImdsSts {
   try {
     $role = (Invoke-RestMethod -Uri "http://100.100.100.200/latest/meta-data/RAM/security-credentials/").Trim()
@@ -288,43 +288,45 @@ function Get-Acs3Authorization(
   "ACS3-HMAC-SHA256 Credential=$Ak,SignedHeaders=$signedHeaders,Signature=$sigHex"
 }
 
-# ================= 实际调用 ==================
-Write-Host "[DBG] 准备调用 FC..."
-$url = $env:FC_URL
-$ak  = $env:ALIBABA_CLOUD_ACCESS_KEY_ID
-$sk  = $env:ALIBABA_CLOUD_ACCESS_KEY_SECRET
-$sts = $env:ALIBABA_CLOUD_SECURITY_TOKEN
+if ($env:Enable_FcRetry -match '^(?i:true|1|yes|on)$') {    
+  # ================= 实际调用 ==================
+  Write-Host "[DBG] 准备调用 FC..."
+  $url = $env:FC_URL
+  $ak  = $env:ALIBABA_CLOUD_ACCESS_KEY_ID
+  $sk  = $env:ALIBABA_CLOUD_ACCESS_KEY_SECRET
+  $sts = $env:ALIBABA_CLOUD_SECURITY_TOKEN
 
-$payloadObj = @{ text = $summary }
-$bodyJson   = $payloadObj | ConvertTo-Json -Depth 5
-$bodyBytes  = [Text.Encoding]::UTF8.GetBytes($bodyJson)
+  $payloadObj = @{ text = $summary }
+  $bodyJson   = $payloadObj | ConvertTo-Json -Depth 5
+  $bodyBytes  = [Text.Encoding]::UTF8.GetBytes($bodyJson)
 
-# 头部（与签名保持一致）
-$headers = @{
-  'x-acs-date' = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-  'Content-Type' = 'application/json; charset=utf-8'
+  # 头部（与签名保持一致）
+  $headers = @{
+    'x-acs-date' = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    'Content-Type' = 'application/json; charset=utf-8'
+  }
+  if ($sts) { $headers['x-acs-security-token'] = $sts }
+
+  $auth = Get-Acs3Authorization -Method 'POST' -Url $url -Body $bodyBytes -Headers $headers -Ak $ak -Sk $sk
+
+  $hc  = [System.Net.Http.HttpClient]::new()
+  $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $url)
+
+  $content = [System.Net.Http.ByteArrayContent]::new([byte[]]$bodyBytes)
+  $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new("application/json")
+  $content.Headers.ContentType.CharSet = "utf-8"
+  $req.Content = $content
+
+  # 附加头（与签名一致）
+  $req.Headers.TryAddWithoutValidation('x-acs-date', $headers['x-acs-date']) | Out-Null
+  $req.Headers.TryAddWithoutValidation('x-acs-content-sha256', $headers['x-acs-content-sha256']) | Out-Null
+  if ($sts) { $req.Headers.TryAddWithoutValidation('x-acs-security-token', $sts) | Out-Null }
+  $req.Headers.TryAddWithoutValidation('Authorization', $auth) | Out-Null
+
+  $resp = $hc.SendAsync($req).Result
+  $respText = ''
+  try { $respText = $resp.Content.ReadAsStringAsync().Result } catch {}
+  Write-Host "[DBG] FC resp status: $($resp.StatusCode)"
+  if ($respText) { Write-Host "[DBG] FC resp body: $respText" }
+  if ($resp.IsSuccessStatusCode) { Write-Information "[OK] 已上送到 FC" } else { Write-Warning "[WARN] 上送 FC 失败 $($resp.StatusCode)" }
 }
-if ($sts) { $headers['x-acs-security-token'] = $sts }
-
-$auth = Get-Acs3Authorization -Method 'POST' -Url $url -Body $bodyBytes -Headers $headers -Ak $ak -Sk $sk
-
-$hc  = [System.Net.Http.HttpClient]::new()
-$req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $url)
-
-$content = [System.Net.Http.ByteArrayContent]::new([byte[]]$bodyBytes)
-$content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new("application/json")
-$content.Headers.ContentType.CharSet = "utf-8"
-$req.Content = $content
-
-# 附加头（与签名一致）
-$req.Headers.TryAddWithoutValidation('x-acs-date', $headers['x-acs-date']) | Out-Null
-$req.Headers.TryAddWithoutValidation('x-acs-content-sha256', $headers['x-acs-content-sha256']) | Out-Null
-if ($sts) { $req.Headers.TryAddWithoutValidation('x-acs-security-token', $sts) | Out-Null }
-$req.Headers.TryAddWithoutValidation('Authorization', $auth) | Out-Null
-
-$resp = $hc.SendAsync($req).Result
-$respText = ''
-try { $respText = $resp.Content.ReadAsStringAsync().Result } catch {}
-Write-Host "[DBG] FC resp status: $($resp.StatusCode)"
-if ($respText) { Write-Host "[DBG] FC resp body: $respText" }
-if ($resp.IsSuccessStatusCode) { Write-Information "[OK] 已上送到 FC" } else { Write-Warning "[WARN] 上送 FC 失败 $($resp.StatusCode)" }
