@@ -15,8 +15,7 @@ for /f "tokens=1,* delims==" %%A in ('findstr "=" "%CONFIG_FILE%"') do (
 )
 
 :: 相对路径脚本（保持一致性）
-:: 第一个变量AHK_SCRIPT_QUEUE 需要替换为适合自己的策略（见 README）
-set "AHK_SCRIPT_QUEUE=%BAT_DIR%\ahk\enter_genshin_queue_nowait.ahk"
+set "AHK_SCRIPT_QUEUE=%BAT_DIR%\ahk\%Queue_Strategy%"
 set "AHK_SCRIPT_BTGI=%BAT_DIR%\ahk\change_btgi_window.ahk"
 set "AHK_SCRIPT_WAIT=%BAT_DIR%\ahk\wait_until_enter.ahk"
 set "AHK_SCRIPT_ENTER=%BAT_DIR%\ahk\enter_door.ahk"
