@@ -16,9 +16,6 @@ if (SCROLL_INTERVAL = "")
 if (PollingInterval = "")
     PollingInterval := 3000
 
-return
-
-
 ; ------------------------------------------------------------
 ; LoadIniAll(file)
 ; 作用：把 INI 文件中所有 section 的所有 key=value 读取为同名全局变量。
