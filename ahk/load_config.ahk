@@ -1,57 +1,52 @@
-; ================= load_config.ahk =================
-; 目标：一次性加载 config.ini 中所有键为同名全局变量，
-;      并保持原脚本“读取后的效果不变”（含必要的默认值）
-
 ; === 统一读取 config.ini（从项目根目录）===
 configFile := A_ScriptDir . "\..\config.ini"
-LoadIniAll(configFile)  ; 加载所有 section 的 key=value
 
-; === 兼容旧逻辑的默认值 ===
-if (BTGI_WIN = "")
-    BTGI_WIN := "ahk_exe BetterGI.exe"
-if (SCROLL_TIMES = "")
-    SCROLL_TIMES := 80
-if (SCROLL_INTERVAL = "")
-    SCROLL_INTERVAL := 5
-if (PollingInterval = "")
-    PollingInterval := 3000
+; ===== 路径配置 =====
+IniRead, BTGI_DIR, %configFile%, Paths, BTGI_DIR
+IniRead, GI_EXE, %configFile%, Paths, GI_EXE
+IniRead, HOOK_URL, %configFile%, Paths, HOOK_URL
 
-; ------------------------------------------------------------
-; LoadIniAll(file)
-; 作用：把 INI 文件中所有 section 的所有 key=value 读取为同名全局变量。
-; 规则：
-;   - 跳过空行、以 ';' 开头的注释行、以及 [Section] 标题行
-;   - 仅按第一个 '=' 分割 key 与 value
-;   - key/value 两端会 Trim 空白
-;   - 若不同 section 存在同名 key，后出现者覆盖先前值
-; ------------------------------------------------------------
-LoadIniAll(file) {
-    global
-    if !FileExist(file) {
-        MsgBox, 16, config.ini not found, 未找到配置文件：%file%
-        return false
-    }
-    Loop, Read, %file%
-    {
-        line := Trim(A_LoopReadLine)
-        if (line = "" || SubStr(line, 1, 1) = ";")
-            continue
-        if (SubStr(line, 1, 1) = "[" && SubStr(line, 0) = "]")
-            continue  ; 跳过 [Section] 标题
+; ===== AHK 配置 =====
+IniRead, YOffset,          %configFile%, AHK, YOffset
+IniRead, DelayMs,          %configFile%, AHK, DelayMs
+IniRead, BTGI_WIN,         %configFile%, AHK, BTGI_WIN, ahk_exe BetterGI.exe
+IniRead, SCROLL_TIMES,     %configFile%, AHK, SCROLL_TIMES, 80
+IniRead, SCROLL_INTERVAL,  %configFile%, AHK, SCROLL_INTERVAL, 5
+IniRead, PollingInterval,  %configFile%, AHK, PollingInterval, 3000
+; ===== ClickPoints（通用进入）=====
+IniRead, ClickPointX_ClaimGift, %configFile%, ClickPoints, ClickPointX_ClaimGift
+IniRead, ClickPointY_ClaimGift, %configFile%, ClickPoints, ClickPointY_ClaimGift
+IniRead, ClickPointX_StartGame,  %configFile%, ClickPoints, ClickPointX_StartGame
+IniRead, ClickPointY_StartGame,  %configFile%, ClickPoints, ClickPointY_StartGame
+IniRead, ClickPointX_QueueNormal,%configFile%, ClickPoints, ClickPointX_QueueNormal
+IniRead, ClickPointY_QueueNormal,%configFile%, ClickPoints, ClickPointY_QueueNormal
+IniRead, ClickPointX_QueueQuick, %configFile%, ClickPoints, ClickPointX_QueueQuick
+IniRead, ClickPointY_QueueQuick, %configFile%, ClickPoints, ClickPointY_QueueQuick
+IniRead, ClickPointX_DoorEnter,  %configFile%, ClickPoints, ClickPointX_DoorEnter
+IniRead, ClickPointY_DoorEnter,  %configFile%, ClickPoints, ClickPointY_DoorEnter
 
-        pos := InStr(line, "=")
-        if (!pos)
-            continue
+; ===== ClickPoints（BetterGI）=====
+IniRead, ClickPointX_BtgiExpandList,  %configFile%, ClickPoints, ClickPointX_BtgiExpandList
+IniRead, ClickPointY_BtgiExpandList,  %configFile%, ClickPoints, ClickPointY_BtgiExpandList
+IniRead, ClickPointX_BtgiPickListItem,%configFile%, ClickPoints, ClickPointX_BtgiPickListItem
+IniRead, ClickPointY_BtgiPickListItem,%configFile%, ClickPoints, ClickPointY_BtgiPickListItem
+IniRead, ClickPointX_BtgiFocusGame,   %configFile%, ClickPoints, ClickPointX_BtgiFocusGame
+IniRead, ClickPointY_BtgiFocusGame,   %configFile%, ClickPoints, ClickPointY_BtgiFocusGame
+IniRead, ClickPointX_BtgiStartDragon1,%configFile%, ClickPoints, ClickPointX_BtgiStartDragon1
+IniRead, ClickPointY_BtgiStartDragon1,%configFile%, ClickPoints, ClickPointY_BtgiStartDragon1
+IniRead, ClickPointX_BtgiStartDragon2,%configFile%, ClickPoints, ClickPointX_BtgiStartDragon2
+IniRead, ClickPointY_BtgiStartDragon2,%configFile%, ClickPoints, ClickPointY_BtgiStartDragon2
 
-        key := RTrim(SubStr(line, 1, pos - 1))
-        val := LTrim(SubStr(line, pos + 1))
+; ===== ClickPoints（空月）=====
+IniRead, ClickPointX_KongyueA, %configFile%, ClickPoints, ClickPointX_KongyueA
+IniRead, ClickPointY_KongyueA, %configFile%, ClickPoints, ClickPointY_KongyueA
+IniRead, ClickPointX_KongyueB, %configFile%, ClickPoints, ClickPointX_KongyueB
+IniRead, ClickPointY_KongyueB, %configFile%, ClickPoints, ClickPointY_KongyueB
+IniRead, ClickPointX_KongyueC, %configFile%, ClickPoints, ClickPointX_KongyueC
+IniRead, ClickPointY_KongyueC, %configFile%, ClickPoints, ClickPointY_KongyueC
 
-        ; —— 去除值后的行尾注释 ——
-        cpos := InStr(val, ";")
-        if (cpos)  val := RTrim(SubStr(val, 1, cpos - 1))
-
-        ; 动态创建同名全局变量
-        %key% := val
-    }
-    return true
-}
+; ===== ClickPoints（夸克上传）=====
+IniRead, ClickPointX_QuarkFileTab,   %configFile%, ClickPoints, ClickPointX_QuarkFileTab
+IniRead, ClickPointY_QuarkFileTab,   %configFile%, ClickPoints, ClickPointY_QuarkFileTab
+IniRead, ClickPointX_QuarkTargetDir, %configFile%, ClickPoints, ClickPointX_QuarkTargetDir
+IniRead, ClickPointY_QuarkTargetDir, %configFile%, ClickPoints, ClickPointY_QuarkTargetDir
