@@ -144,36 +144,6 @@ $client.SendAsync($wreq).Result | Out-Null
 
 Write-Host "[OK] 已发送AI简报到企业微信"
 
-# ====== 将 AI 的结果原样发送到 FC ======
-if ($EnableFcRetry) {
-  $url = $env:FC_URL
-  $ak  = $env:ALIBABA_CLOUD_ACCESS_KEY_ID
-  $sk  = $env:ALIBABA_CLOUD_ACCESS_KEY_SECRET
-  $sts = $env:ALIBABA_CLOUD_SECURITY_TOKEN
-
-  $date = (Get-Date).ToUniversalTime().ToString("s") + "Z"   # ISO8601 UTC
-  $bodyBytes = [Text.Encoding]::UTF8.GetBytes($summary)
-
-  $extra = @{ 'x-acs-date' = $date }
-  if ($sts) { $extra['x-acs-security-token'] = $sts }
-
-  $auth = Get-AcsAuthorization -Method 'POST' -Url $url -BodyBytes $bodyBytes -ExtraHeaders $extra -Ak $ak -Sk $sk
-
-  $hc  = [System.Net.Http.HttpClient]::new()
-  $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $url)
-  $content = [System.Net.Http.ByteArrayContent]::new([byte[]]$bodyBytes)
-  $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::new("text/plain")
-  $content.Headers.ContentType.CharSet = "utf-8"
-  $req.Content = $content
-  $req.Headers.Add('x-acs-date', $date)
-  if ($sts) { $req.Headers.Add('x-acs-security-token', $sts) }
-  $req.Headers.Add('authorization', $auth)
-
-  $resp = $hc.SendAsync($req).Result
-  if ($resp.IsSuccessStatusCode) { Write-Information "[OK] 已上送到 FC" } else { Write-Warning "[WARN] 上送 FC 失败 $($resp.StatusCode)" }
-}
-
-
 # ================= FC HTTP 触发器 V3 签名与调用 ==================
 function Set-ImdsSts {
   try {

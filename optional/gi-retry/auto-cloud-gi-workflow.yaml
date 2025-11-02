@@ -1,60 +1,30 @@
-  Type: StateMachine
-Name: auto-cloud-gi-workflow
+Type: StateMachine
 SpecVersion: v1
-StartAt: Describe
+Name: auto-cloud-gi-workflow
+StartAt: SleepBeforeStart
 States:
-  - Name: Describe
-    Type: Task
-    Action: ECS:DescribeInstances
-    TaskMode: RequestComplete
-    Parameters:
-      RegionId.$: $Context.RegionId
-      InstanceIds.$: toArray($Input.ecsInstanceId)
-    OutputConstructor:
-      status.$: $Output.Body.Instances.Instance[0].Status
-    Next: EnsureStopped
-  - Name: EnsureStopped
-    Type: Choice
-    Branches:
-      - Condition: $Input.status == "Stopped"
-        Next: StartInstance
-    Default: ExitOK
-  - Name: ExitOK
-    Type: Succeed
-    OutputConstructor:
-      path: ExitOK
-      actionTaken: false
-      reason: InstanceNotStopped
-      observedStatus.$: $Input.status
-    End: true
-  - Name: StartInstance
-    Type: Task
+  - Type: Wait
+    Name: SleepBeforeStart
+    Seconds: 1200
+    Next: StartInstance
+  - Type: Task
+    Name: StartInstance
     Action: ECS:StartInstance
     TaskMode: RequestComplete
     Parameters:
+      RegionId: cn-shanghai
       InstanceId.$: $Input.ecsInstanceId
-    Retry:
-      - Errors:
-          - FnF.ServiceUnavailable
-          - FnF.TaskFailed
-        IntervalSeconds: 2
-        MaxAttempts: 3
-        BackoffRate: 2
-    Next: WaitWindow
-  - Name: WaitWindow
-    Type: Wait
-    Seconds.$: $Input.windowSeconds
+    Next: SleepInWindow
+  - Type: Wait
+    Name: SleepInWindow
+    Seconds.$: $Context.Execution.Input.windowSeconds
     Next: StopInstance
-  - Name: StopInstance
-    Type: Task
+  - Type: Task
+    Name: StopInstance
     Action: ECS:StopInstance
     TaskMode: RequestComplete
     Parameters:
+      RegionId: cn-shanghai
       InstanceId.$: $Input.ecsInstanceId
-      ForceStop: true
-    OutputConstructor:
-      path: StopInstance
-      actionTaken: true
-      waitedSeconds.$: $Input.windowSeconds
-      finalStatus: Stopped
+      StoppedMode: StopCharging
     End: true
