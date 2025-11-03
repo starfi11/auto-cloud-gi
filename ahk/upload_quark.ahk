@@ -1,5 +1,5 @@
 CoordMode, Mouse, Screen
-
+#Include %A_ScriptDir%\load_config.ahk
 ClickFixed(x, y, clicks := 1) {
     newY := y + 0
     Click, %x%, %newY%, %clicks%
