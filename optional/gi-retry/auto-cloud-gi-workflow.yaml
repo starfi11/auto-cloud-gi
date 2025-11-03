@@ -7,24 +7,29 @@ States:
     Name: SleepBeforeStart
     Seconds: 1200
     Next: StartInstance
+
   - Type: Task
     Name: StartInstance
     Action: ECS:StartInstance
     TaskMode: RequestComplete
     Parameters:
       RegionId: cn-shanghai
-      InstanceId.$: $Input.ecsInstanceId
+      # 从“执行入参”读取，而不是 $Input
+      InstanceId.$: $Context.Execution.Input.ecsInstanceId
     Next: SleepInWindow
+
   - Type: Wait
     Name: SleepInWindow
+    # 窗口时长从执行入参读取
     Seconds.$: $Context.Execution.Input.windowSeconds
     Next: StopInstance
+
   - Type: Task
     Name: StopInstance
     Action: ECS:StopInstance
     TaskMode: RequestComplete
     Parameters:
       RegionId: cn-shanghai
-      InstanceId.$: $Input.ecsInstanceId
+      InstanceId.$: $Context.Execution.Input.ecsInstanceId
       StoppedMode: StopCharging
     End: true
