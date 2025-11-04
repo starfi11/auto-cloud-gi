@@ -53,7 +53,8 @@ timeout /t 15 >nul
 
 echo [%time%] 启动排队点击脚本（enter_genshin_queue）... >> "%LOG_FILE%"
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_QUEUE%"
-
+:: 添加3秒延迟保证已经进入排队界面
+timeout /t 3 >nul
 :: 等待云游戏排队
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_WAIT%"
 :: 等待游戏启动
