@@ -223,6 +223,44 @@ AI_TAIL=600
 
 比较麻烦是权限策略配置、角色创建、相关服务开通，相关配置后续补上。
 
+### 实时监测
+
+实时监测过程中的截图，出现意外情况时发出告警。
+
+环境部署与配置：
+
+在config.ini中将实时监测相关的开关打开，配置图像大模型API，当本地文本识别判断出现意外情况时会调用API进行判断。保证每次任务期间调用API次数不超过三次。
+
+
+
+https://www.python.org/downloads/windows/
+
+选择 python 3.10.x 并下载 Windows installer 进行安装（勾选add to PATH）
+
+```bash
+python --version
+pip --version
+```
+
+
+
+```bash
+# 可选：升级 pip
+python -m pip install --upgrade pip
+
+# Web 服务 + HTTP 请求
+python -m pip install flask requests
+
+# 图像读取 + 裁剪中心 60%
+python -m pip install opencv-python pillow
+
+# PaddleOCR（带 OCR 能力）
+# 先装 paddlepaddle，再装 paddleocr
+python -m pip install paddlepaddle
+python -m pip install "paddleocr[all]"
+
+```
+
 
 
 ## 声明

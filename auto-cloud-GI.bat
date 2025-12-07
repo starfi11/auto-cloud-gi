@@ -38,6 +38,13 @@ if /i "%Enable_QuarkUpload%"=="true" (
         rmdir /s /q "%BAT_DIR%\logs\screens\"
     )
 )
+
+:: 如启用实时风控，则尝试启动 RiskGuard 服务
+if /i "%Enable_RiskGuard%"=="true" (
+    echo 启动 RiskGuard 服务...
+    start "" /min python "%BAT_DIR%utils\risk_guard_service.py"
+)
+
 :: 可选操作：开始截图采样
 if /i "%Enable_ScreenSampler%"=="true" (
     echo 开始截图采样...
