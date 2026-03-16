@@ -30,6 +30,14 @@ if not exist "%BTGI_DIR%\log" (
     mkdir "%BTGI_DIR%\log"
 )
 
+:: ====== 新增：前置更新检查 ======
+echo [%time%] 正在检查 BetterGI 更新... >> "%LOG_FILE%"
+python "%BAT_DIR%utils\pre_flight_updater.py" --app btgi --path "%BTGI_EXE%"
+
+echo [%time%] 正在检查 云原神 更新... >> "%LOG_FILE%"
+python "%BAT_DIR%utils\pre_flight_updater.py" --app genshin --path "%GI_EXE%"
+:: ==============================
+
 :: 清空旧日志
 del "%LOG_FILE%" >nul 2>&1
 :: 如果开启了上传功能，清空screens目录中所有的截图(不删会导致上传失败)
