@@ -19,8 +19,11 @@ except Exception:
     ctypes.windll.user32.SetProcessDPIAware()
 
 # 初始化 OCR
-# 复用项目中的 PaddleOCR 配置
-ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+# 兼容不同版本的 PaddleOCR 参数
+try:
+    ocr = PaddleOCR(use_textline_orientation=True, lang="ch")
+except Exception:
+    ocr = PaddleOCR(use_angle_cls=True, lang="ch")
 
 def get_window_rect_accurate(hwnd):
     """
