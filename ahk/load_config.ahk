@@ -26,6 +26,10 @@ IniRead, ClickPointX_DoorEnter,  %configFile%, ClickPoints, ClickPointX_DoorEnte
 IniRead, ClickPointY_DoorEnter,  %configFile%, ClickPoints, ClickPointY_DoorEnter
 
 ; ===== ClickPoints（BetterGI）=====
+IniRead, ClickPointX_BtgiUpdateGreen,  %configFile%, ClickPoints, ClickPointX_BtgiUpdateGreen
+IniRead, ClickPointY_BtgiUpdateGreen,  %configFile%, ClickPoints, ClickPointY_BtgiUpdateGreen
+IniRead, ClickPointX_BtgiUpdateIgnore, %configFile%, ClickPoints, ClickPointX_BtgiUpdateIgnore
+IniRead, ClickPointY_BtgiUpdateIgnore, %configFile%, ClickPoints, ClickPointY_BtgiUpdateIgnore
 IniRead, ClickPointX_BtgiExpandList,  %configFile%, ClickPoints, ClickPointX_BtgiExpandList
 IniRead, ClickPointY_BtgiExpandList,  %configFile%, ClickPoints, ClickPointY_BtgiExpandList
 IniRead, ClickPointX_BtgiPickListItem,%configFile%, ClickPoints, ClickPointX_BtgiPickListItem

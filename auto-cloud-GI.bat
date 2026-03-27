@@ -20,6 +20,7 @@ set "AHK_SCRIPT_BTGI=%BAT_DIR%\ahk\change_btgi_window.ahk"
 set "AHK_SCRIPT_WAIT=%BAT_DIR%\ahk\wait_until_enter.ahk"
 set "AHK_SCRIPT_ENTER=%BAT_DIR%\ahk\enter_door.ahk"
 set "AHK_SCRIPT_KONGYUE=%BAT_DIR%\ahk\get_kongyue.ahk"
+set "AHK_SCRIPT_UPDATE=%BAT_DIR%\ahk\handle_btgi_update.ahk"
 set "BAT_SEND_LOG=%BAT_DIR%\utils\send_wecom_log.bat"
 set "BAT_UPLOAD=%BAT_DIR%\utils\upload_quark.bat"
 set "LOG_FILE=%BAT_DIR%\logs\acgi_log.txt"
@@ -78,6 +79,10 @@ echo [%time%] 启动 BetterGI 主程序... >> "%LOG_FILE%"
 cd /d "%BTGI_DIR%"
 start "" "%BTGI_EXE%"
 timeout /t 10 >nul
+
+echo [%time%] 检测并处理 BetterGI 更新弹窗... >> "%LOG_FILE%"
+start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_UPDATE%"
+timeout /t 1 >nul
 
 echo [%time%] 执行窗口选中点击脚本（change_btgi_window）... >> "%LOG_FILE%"
 start /wait "" "%AHK_EXE%" "%AHK_SCRIPT_BTGI%"
