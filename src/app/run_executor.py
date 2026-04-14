@@ -199,6 +199,9 @@ class RunExecutor:
                 if stage:
                     self._transition(context, str(stage), reason=f"intent:{step.name}")
                 self._run_step(context, step)
+                # Track that this state's action has executed (for re-entry detection).
+                reentry_key = f"_action_done:{estimate.state}"
+                context.retries[reentry_key] = int(context.retries.get(reentry_key, 0)) + 1
                 if decision.next_state:
                     self._create_pending_transition(
                         plan=plan,
@@ -382,7 +385,8 @@ class RunExecutor:
         context.state = target
         context.layered_state.global_layer.state = target
         context.layered_state.global_layer.last_reason = reason
-        for key in [k for k in context.retries.keys() if k.startswith("_state_seen:")]:
+        # Clear per-state counters that are only valid within a single state visit
+        for key in [k for k in context.retries.keys() if k.startswith(("_state_seen:", "_observed_seen:"))]:
             context.retries.pop(key, None)
         self._checkpoints.save(context)
         self._logs.state_transition(context.run_id, source, context.state, reason=reason)
