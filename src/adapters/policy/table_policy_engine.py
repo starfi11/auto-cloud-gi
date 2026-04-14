@@ -28,11 +28,12 @@ class TablePolicyEngine(PolicyEnginePort):
         # Recognizer-driven transition is allowed only in observation states (no bound action).
         # Action states must execute their action first, otherwise we may skip critical side effects.
         can_sync_by_observation = current_node.action is None
+        observation_sync_threshold = 0.75
         if can_sync_by_observation and observed_state != current_state and observed_state:
             observed_node = state_plan.node_for(observed_state)
-            if observed_state in state_plan.terminal_states and estimate.confidence >= 0.65:
+            if observed_state in state_plan.terminal_states and estimate.confidence >= observation_sync_threshold:
                 return PolicyDecision(kind="finish", reason="terminal_state_observed")
-            if observed_node is not None and estimate.confidence >= 0.6:
+            if observed_node is not None and estimate.confidence >= observation_sync_threshold:
                 seen_key = f"_observed_seen:{observed_state}"
                 seen = int(context.retries.get(seen_key, 0)) + 1
                 context.retries[seen_key] = seen

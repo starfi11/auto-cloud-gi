@@ -23,18 +23,18 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
             "required_context": "genshin_window",
             "controller_id": "genshin_controller",
             "required_resources": ["mouse", "keyboard", "focus"],
-            "transition_settle_seconds": float(override.get("transition_settle_seconds", 0.8)),
-            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 45.0)),
-            "transition_require_observed": bool(override.get("transition_require_observed", False)),
-            "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
+            "transition_settle_seconds": float(override.get("transition_settle_seconds", 2.0)),
+            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 60.0)),
+            "transition_require_observed": bool(override.get("transition_require_observed", True)),
+            "transition_observed_ticks": int(override.get("transition_observed_ticks", 3)),
         }
         shared_btgi = {
             "required_context": "bettergi_panel",
             "controller_id": "bettergi_controller",
             "required_resources": ["mouse", "keyboard", "focus"],
-            "transition_settle_seconds": float(override.get("transition_settle_seconds", 0.8)),
-            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 45.0)),
-            "transition_require_observed": bool(override.get("transition_require_observed", False)),
+            "transition_settle_seconds": float(override.get("transition_settle_seconds", 2.0)),
+            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 60.0)),
+            "transition_require_observed": bool(override.get("transition_require_observed", True)),
             "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
         }
 
@@ -83,8 +83,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                 "op": "click_element",
                 "element_id": "cloud_door_enter",
                 "element_profile": "genshin_cloud",
-                "timeout_seconds": 3.0,
-                "poll_seconds": 0.1,
+                "timeout_seconds": 18.0,
+                "poll_seconds": 0.2,
                 "clicks": 2,
             }
         ]
@@ -182,8 +182,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                                 {"present": "cloud_click_blank_close_keyword"},
                             ],
                         },
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.10,
+                        "poll_seconds": 0.03,
                     },
                 ),
                 StateNode(
@@ -202,16 +202,16 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {"present": "cloud_start_game_button"},
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.10,
+                        "poll_seconds": 0.03,
                     },
                 ),
                 StateNode(
                     state="S_QUEUEING",
                     controller_id="genshin_controller",
                     context_id="genshin_window",
-                    wait_seconds=0.2,
-                    stable_ticks=2,
+                    wait_seconds=0.3,
+                    stable_ticks=3,
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
@@ -221,8 +221,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                                 {"present": "cloud_queue_eta_text"},
                             ],
                         },
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.12,
+                        "poll_seconds": 0.03,
                     },
                 ),
                 StateNode(
@@ -231,13 +231,15 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                         name="click_enter_game",
                         kind="game.queue.enter",
                         params={"queue_macro_steps": click_enter_game_steps, **shared_genshin},
+                        max_retries=2,
+                        backoff_seconds=1.5,
                         controller_id="genshin_controller",
                         required_context="genshin_window",
                     ),
                     controller_id="genshin_controller",
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
-                    stable_ticks=2,
+                    stable_ticks=4,
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
@@ -248,8 +250,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                                 {"present": "cloud_door_enter"},
                             ],
                         },
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.20,
+                        "poll_seconds": 0.05,
                     },
                 ),
                 StateNode(
@@ -264,12 +266,12 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     controller_id="genshin_controller",
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
-                    stable_ticks=2,
+                    stable_ticks=3,
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {"present": "cloud_kongyue_reward_text"},
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.12,
+                        "poll_seconds": 0.03,
                     },
                 ),
                 StateNode(
@@ -297,8 +299,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                                 {"present": "cloud_in_game_num_4"},
                             ],
                         },
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.10,
+                        "poll_seconds": 0.03,
                     },
                 ),
                 StateNode(
@@ -335,8 +337,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                                 {"present": "btgi_update_ignore_button"},
                             ],
                         },
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.10,
+                        "poll_seconds": 0.03,
                     },
                 ),
                 StateNode(
@@ -355,8 +357,8 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     recognition={
                         "profile": "bettergi",
                         "expr": {"present": "btgi_home"},
-                        "timeout_seconds": 0.03,
-                        "poll_seconds": 0.01,
+                        "timeout_seconds": 0.10,
+                        "poll_seconds": 0.03,
                     },
                 ),
             ],

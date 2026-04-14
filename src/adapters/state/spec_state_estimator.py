@@ -218,15 +218,18 @@ class SpecStateEstimator(StateEstimatorPort):
             evidence = [x for e in evals for x in e.evidence_refs]
             if op == "all":
                 ok = matched == total
-                score = matched / max(1, total)
+                raw = matched / max(1, total)
+                score = raw if ok else min(raw, 0.45)
                 return _CondEval(ok, score, matched, total, evidence, f"all:{matched}/{total}")
             if op == "any":
                 ok = matched >= 1
-                score = matched / max(1, total)
+                raw = matched / max(1, total)
+                score = raw if ok else min(raw, 0.35)
                 return _CondEval(ok, score, matched, total, evidence, f"any:{matched}/{total}")
             k = int(expr.get("k", 1))
             ok = matched >= k
-            score = matched / max(1, total)
+            raw = matched / max(1, total)
+            score = raw if ok else min(raw, 0.45)
             return _CondEval(ok, score, matched, total, evidence, f"kof:{matched}/{total},k={k}")
 
         if op == "not":

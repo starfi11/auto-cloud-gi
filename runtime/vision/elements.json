@@ -66,9 +66,9 @@
     {
       "id": "cloud_door_enter",
       "profile": "genshin_cloud",
-      "roi": [730, 820, 320, 100],
+      "roi": [640, 760, 520, 190],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["点击进入"]}]
+      "matchers": [{"kind": "text_ocr", "text_any": ["点击进入", "点击进入游戏", "进入游戏", "进入"]}]
     },
     {
       "id": "cloud_kongyue_reward_text",
