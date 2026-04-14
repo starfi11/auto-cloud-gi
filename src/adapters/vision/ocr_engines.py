@@ -33,7 +33,7 @@ class NullOcrEngine(OcrEnginePort):
 class PaddleOcrEngine(OcrEnginePort):
     def __init__(self, lang: str) -> None:
         # Keep runtime conservative on Windows CPU to avoid PIR-related kernel issues.
-        os.environ.setdefault("FLAGS_enable_pir_api", os.getenv("PADDLE_FLAGS_ENABLE_PIR_API", "0"))
+        os.environ["FLAGS_enable_pir_api"] = os.getenv("PADDLE_FLAGS_ENABLE_PIR_API", "0").strip() or "0"
         from paddleocr import PaddleOCR  # type: ignore
 
         self.last_text = ""
