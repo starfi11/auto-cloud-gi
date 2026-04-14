@@ -37,8 +37,12 @@ class PaddleOcrEngine(OcrEnginePort):
         self.last_text = ""
         paddle_lang = _normalize_paddle_lang(lang)
         use_angle_cls = _bool_env("PADDLE_OCR_USE_ANGLE_CLS", default=False)
-        show_log = _bool_env("PADDLE_OCR_SHOW_LOG", default=False)
-        self._ocr = PaddleOCR(use_angle_cls=use_angle_cls, lang=paddle_lang, show_log=show_log)
+        # PaddleOCR parameters differ across versions.
+        # Start with a richer arg set and gracefully degrade to a minimal init.
+        try:
+            self._ocr = PaddleOCR(use_angle_cls=use_angle_cls, lang=paddle_lang)
+        except Exception:
+            self._ocr = PaddleOCR(lang=paddle_lang)
 
     def read_text(self, image: Any) -> str:
         try:
