@@ -160,6 +160,12 @@ class LogManager:
         path.write_text(json.dumps(_json_safe(summary), ensure_ascii=False, indent=2), encoding="utf-8")
         return path
 
+    def write_run_diagnostics(self, run_id: str, diagnostics: dict[str, Any]) -> Path:
+        bundle = self._ensure_run_bundle(run_id)
+        path = bundle.run_root / "diagnostics.json"
+        path.write_text(json.dumps(_json_safe(diagnostics), ensure_ascii=False, indent=2), encoding="utf-8")
+        return path
+
     def replay_event(self, run_id: str, event_type: str, payload: dict[str, Any]) -> None:
         bundle = self._ensure_run_bundle(run_id)
         seq = self._next_seq(run_id)

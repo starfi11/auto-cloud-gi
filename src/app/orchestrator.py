@@ -202,6 +202,17 @@ class Orchestrator(TriggerPort):
                     "reason": rec.reason,
                 },
             )
+            self._logs.write_run_diagnostics(
+                run_id,
+                {
+                    "run_id": run_id,
+                    "status": "finished",
+                    "state": context.state,
+                    "context_id": context.active_context_id,
+                    "controller_id": context.layered_state.controller_layer.active_controller_id,
+                    "last_error": context.last_error,
+                },
+            )
             self._event_bus.publish(Event(type="RUN.FINISHED", source="executor", run_id=run_id, payload={}))
             self._event_bus.dispatch_once()
         except InterruptError as exc:
@@ -226,6 +237,18 @@ class Orchestrator(TriggerPort):
                     "reason": reason,
                 },
             )
+            self._logs.write_run_diagnostics(
+                run_id,
+                {
+                    "run_id": run_id,
+                    "status": status,
+                    "state": context.state,
+                    "context_id": context.active_context_id,
+                    "controller_id": context.layered_state.controller_layer.active_controller_id,
+                    "reason": reason,
+                    "last_error": context.last_error,
+                },
+            )
             self._event_bus.publish(
                 Event(type="RUN.INTERRUPTED", source="executor", run_id=run_id, payload={"reason": reason})
             )
@@ -246,6 +269,18 @@ class Orchestrator(TriggerPort):
                     "target_profile": context.manifest.get("target_profile", ""),
                     "scenario": context.manifest.get("scenario", ""),
                     "reason": str(exc),
+                },
+            )
+            self._logs.write_run_diagnostics(
+                run_id,
+                {
+                    "run_id": run_id,
+                    "status": "failed",
+                    "state": context.state,
+                    "context_id": context.active_context_id,
+                    "controller_id": context.layered_state.controller_layer.active_controller_id,
+                    "reason": str(exc),
+                    "last_error": context.last_error,
                 },
             )
             self._event_bus.publish(

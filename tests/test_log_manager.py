@@ -18,6 +18,7 @@ class LogManagerTest(unittest.TestCase):
             logs.action_event(run_id, "start_cloud_gi", "ok", {"elapsed_ms": 123})
             logs.replay_event(run_id, "transition", {"from": "BOOTSTRAP", "to": "LOAD_POLICY"})
             summary_path = logs.write_run_summary(run_id, {"status": "accepted"})
+            diag_path = logs.write_run_diagnostics(run_id, {"status": "accepted", "last_error": {}})
 
             self.assertTrue((Path(td) / "logs" / "system.jsonl").exists())
             self.assertTrue((Path(td) / "logs" / "control_api.jsonl").exists())
@@ -26,6 +27,7 @@ class LogManagerTest(unittest.TestCase):
             self.assertTrue((Path(td) / "logs" / "runs" / run_id / "actions.jsonl").exists())
             self.assertTrue((Path(td) / "logs" / "runs" / run_id / "replay_trace.jsonl").exists())
             self.assertTrue(summary_path.exists())
+            self.assertTrue(diag_path.exists())
 
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             self.assertEqual(summary["status"], "accepted")

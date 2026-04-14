@@ -12,6 +12,7 @@ from src.kernel.checkpoint_store import CheckpointStore
 from src.kernel.exception_router import InterruptError
 from src.kernel.resource_arbiter import ResourceArbiter
 from src.infra.log_manager import LogManager
+from src.infra.diagnostics import classify_failure
 from src.domain.recovery import RecoveryDirective
 from src.ports.policy_engine_port import PolicyEnginePort
 from src.ports.ai_recovery_planner_port import AiRecoveryPlannerPort
@@ -284,6 +285,15 @@ class RunExecutor:
                     timeout_seconds=float(step.params.get("resource_timeout_seconds", 1.0)),
                 )
                 if lease is None:
+                    diag = classify_failure(f"resource_acquire_timeout:{required_resources}")
+                    context.last_error = {
+                        "action": step.name,
+                        "kind": step.kind,
+                        "detail": f"resource_acquire_timeout:{required_resources}",
+                        "error_code": diag.code,
+                        "error_category": diag.category,
+                        "hint": diag.hint,
+                    }
                     raise RuntimeError(f"resource_acquire_timeout:{required_resources}")
             self._logs.action_event(
                 context.run_id,
@@ -306,8 +316,24 @@ class RunExecutor:
                 if lease is not None:
                     self._resource_arbiter.release(lease)
             if bool(result.get("risk_stopped", False)):
+                context.last_error = {
+                    "action": step.name,
+                    "kind": step.kind,
+                    "detail": str(result.get("detail", "risk_stop:risk_detected")),
+                    "error_code": "RISK_STOP",
+                    "error_category": "safety",
+                    "hint": "触发风控停止",
+                }
                 raise InterruptError(str(result.get("detail", "risk_stop:risk_detected")))
             if bool(result.get("interrupted", False)):
+                context.last_error = {
+                    "action": step.name,
+                    "kind": step.kind,
+                    "detail": str(result.get("detail", "interrupted:manual_interrupt")),
+                    "error_code": "INTERRUPTED",
+                    "error_category": "control",
+                    "hint": "收到中断信号",
+                }
                 raise InterruptError(str(result.get("detail", "interrupted:manual_interrupt")))
             ok = bool(result.get("ok", False))
             if ok:
@@ -346,9 +372,30 @@ class RunExecutor:
                     "attempt": attempt,
                     "max_retries": max_retries,
                     "retryable": retryable,
+                    "error_code": classify_failure(str(result.get("detail", ""))).code,
+                    "error_category": classify_failure(str(result.get("detail", ""))).category,
+                    "hint": classify_failure(str(result.get("detail", ""))).hint,
+                    "state": context.state,
+                    "context_id": context.active_context_id,
+                    "controller_id": context.layered_state.controller_layer.active_controller_id,
                 },
                 level="ERROR",
             )
+            diag = classify_failure(str(result.get("detail", "")))
+            context.last_error = {
+                "action": step.name,
+                "kind": step.kind,
+                "detail": str(result.get("detail", "")),
+                "attempt": attempt,
+                "max_retries": max_retries,
+                "retryable": retryable,
+                "error_code": diag.code,
+                "error_category": diag.category,
+                "hint": diag.hint,
+                "state": context.state,
+                "context_id": context.active_context_id,
+                "controller_id": context.layered_state.controller_layer.active_controller_id,
+            }
             self._logs.replay_event(
                 context.run_id,
                 "action_result",
@@ -457,8 +504,24 @@ class RunExecutor:
         if self._risk_check is not None:
             hit, reason = self._risk_check(context.run_id)
             if hit:
+                context.last_error = {
+                    "detail": f"risk_stop:{reason or 'risk_detected'}",
+                    "error_code": "RISK_STOP",
+                    "error_category": "safety",
+                    "hint": "触发风控停止",
+                    "state": context.state,
+                    "context_id": context.active_context_id,
+                }
                 raise InterruptError(f"risk_stop:{reason or 'risk_detected'}")
         if self._interrupt_check is not None:
             hit, reason = self._interrupt_check(context.run_id)
             if hit:
+                context.last_error = {
+                    "detail": f"interrupted:{reason or 'manual_interrupt'}",
+                    "error_code": "INTERRUPTED",
+                    "error_category": "control",
+                    "hint": "收到中断信号",
+                    "state": context.state,
+                    "context_id": context.active_context_id,
+                }
                 raise InterruptError(f"interrupted:{reason or 'manual_interrupt'}")

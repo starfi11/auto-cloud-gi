@@ -24,6 +24,7 @@ class CheckpointStore:
             "event_cursor": context.event_cursor,
             "artifacts": context.artifacts,
             "layered_state": asdict(context.layered_state) if is_dataclass(context.layered_state) else {},
+            "last_error": context.last_error,
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
