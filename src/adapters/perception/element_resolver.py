@@ -5,7 +5,7 @@ from time import monotonic, sleep
 from typing import Any, Protocol
 
 from src.adapters.perception.element_registry import ElementRegistry
-from src.adapters.vision import TemplateStore
+from src.adapters.vision import TemplateStore, build_ocr_engine
 from src.domain.ui_element import ElementMatchResult, MatcherSpec, UiElement
 from src.ports.element_resolver_port import ElementResolverPort
 from src.ports.ocr_engine_port import OcrEnginePort
@@ -29,17 +29,6 @@ class UiSenseBackend(Protocol):
         ...
 
 
-class _DefaultOcrEngine(OcrEnginePort):
-    def read_text(self, image: Any) -> str:
-        try:
-            import pytesseract  # type: ignore
-
-            return str(pytesseract.image_to_string(image, lang=os.getenv("OCR_LANG", "eng+chi_sim")))
-        except Exception:
-            # Graceful fallback when OCR runtime is not installed yet.
-            return ""
-
-
 class ElementResolver(ElementResolverPort):
     def __init__(
         self,
@@ -53,8 +42,14 @@ class ElementResolver(ElementResolverPort):
         self._registry = registry or ElementRegistry.from_json(
             os.getenv("VISION_ELEMENT_SPEC", "./runtime/vision/elements.json")
         )
-        self._template_store = TemplateStore(template_root or os.getenv("VISION_TEMPLATE_ROOT", "./runtime/vision/templates"))
-        self._ocr = ocr_engine or _DefaultOcrEngine()
+        template_env = (
+            template_root
+            or os.getenv("VISION_TEMPLATE_ROOT", "").strip()
+            or os.getenv("VISION_TEMPLATE_DIR", "").strip()
+            or "./runtime/vision/templates"
+        )
+        self._template_store = TemplateStore(template_env)
+        self._ocr = ocr_engine or build_ocr_engine()
 
     def resolve(
         self,

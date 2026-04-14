@@ -46,6 +46,22 @@ python .\scripts\smoke_run.py
 python .\scripts\smoke_run.py --run-id <run_id>
 ```
 
+先做运行时依赖自检（推荐）：
+
+```bash
+python scripts/check_runtime_deps.py
+```
+
+默认 OCR 引擎为 `PaddleOCR`（`OCR_ENGINE=paddle`）。
+
+若切换到 `tesseract`，请安装 Tesseract OCR，并在 `.env` 配置：
+
+```env
+OCR_ENGINE=tesseract
+TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
+OCR_LANG=chi_sim+eng
+```
+
 ## 配置说明
 
 使用 `.env` 配置运行参数，核心项：
@@ -144,4 +160,4 @@ curl -X POST http://127.0.0.1:8788/api/v1/runs \
 - `VISION_ELEMENT_SPEC`
 - `VISION_TEMPLATE_ROOT`
 
-OCR 引擎默认尝试 `pytesseract`（未安装会自动退化为仅模板匹配）。
+OCR 引擎默认使用 `PaddleOCR`，可通过 `OCR_ENGINE` 切换为 `tesseract` 或 `none`。

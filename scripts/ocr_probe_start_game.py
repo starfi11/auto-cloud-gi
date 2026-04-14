@@ -16,7 +16,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.adapters.perception.element_registry import ElementRegistry
 from src.adapters.perception.element_resolver import ElementResolver
 from src.adapters.runtime.ui_macro import build_ui_backend
-from src.ports.ocr_engine_port import OcrEnginePort
+from src.adapters.vision import build_ocr_engine
 
 
 @dataclass
@@ -27,23 +27,6 @@ class ProbeResult:
     matched_text: str
     bbox: tuple[int, int, int, int] | None
     matcher_kind: str
-
-
-class DebugOcrEngine(OcrEnginePort):
-    def __init__(self, lang: str) -> None:
-        self.lang = lang
-        self.last_text = ""
-
-    def read_text(self, image: Any) -> str:
-        try:
-            import pytesseract  # type: ignore
-
-            text = str(pytesseract.image_to_string(image, lang=self.lang))
-            self.last_text = text
-            return text
-        except Exception as exc:  # noqa: BLE001
-            self.last_text = f"<ocr_error:{type(exc).__name__}:{exc}>"
-            return ""
 
 
 def _scale_roi(roi: tuple[int, int, int, int], base_size: tuple[int, int], screen_size: tuple[int, int]) -> tuple[int, int, int, int]:
@@ -76,14 +59,22 @@ def main() -> int:
     parser.add_argument("--dump-dir", default="./runtime/debug_frames")
     parser.add_argument("--dump-images", action="store_true")
     parser.add_argument("--element-spec", default=os.getenv("VISION_ELEMENT_SPEC", "./runtime/vision/elements.json"))
-    parser.add_argument("--template-root", default=os.getenv("VISION_TEMPLATE_ROOT", "./runtime/vision/templates"))
+    parser.add_argument(
+        "--template-root",
+        default=os.getenv("VISION_TEMPLATE_ROOT", "").strip()
+        or os.getenv("VISION_TEMPLATE_DIR", "").strip()
+        or "./runtime/vision/templates",
+    )
     parser.add_argument("--backend", default=os.getenv("UI_AUTOMATION_BACKEND", "auto"))
+    parser.add_argument("--ocr-engine", default=os.getenv("OCR_ENGINE", "paddle"), choices=["paddle", "tesseract", "none"])
     parser.add_argument("--ocr-lang", default=os.getenv("OCR_LANG", "eng+chi_sim"))
     args = parser.parse_args()
+    os.environ["OCR_ENGINE"] = args.ocr_engine
+    os.environ["OCR_LANG"] = args.ocr_lang
 
     backend = build_ui_backend(args.backend)
     screen = backend.size()
-    print(f"[probe] backend={args.backend} screen={screen}")
+    print(f"[probe] backend={args.backend} screen={screen} ocr_engine={args.ocr_engine} ocr_lang={args.ocr_lang}")
 
     registry = ElementRegistry.from_json(args.element_spec)
     element = registry.get(args.element_id)
@@ -95,7 +86,7 @@ def main() -> int:
         f"roi={element.roi} base={element.base_size} matchers={[m.kind for m in element.matchers]}"
     )
 
-    ocr = DebugOcrEngine(args.ocr_lang)
+    ocr = build_ocr_engine()
     resolver = ElementResolver(
         backend,
         registry=registry,
@@ -139,8 +130,9 @@ def main() -> int:
             f"[probe] attempt={r.attempt} ok={r.ok} matcher={r.matcher_kind or '-'} "
             f"matched={r.matched_text or '-'} bbox={r.bbox} detail={r.detail}"
         )
-        if ocr.last_text:
-            preview = " ".join(ocr.last_text.split())
+        last_text = str(getattr(ocr, "last_text", "") or "")
+        if last_text:
+            preview = " ".join(last_text.split())
             if len(preview) > 120:
                 preview = preview[:120] + "..."
             print(f"[probe] ocr_preview={preview}")

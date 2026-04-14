@@ -141,9 +141,12 @@ class MacroStepResult:
 class UiMacroExecutor:
     def __init__(self, backend: UiBackend, element_resolver: ElementResolverPort | None = None) -> None:
         self._backend = backend
-        self._template_store = TemplateStore(
-            os.getenv("VISION_TEMPLATE_ROOT", "./runtime/vision/templates")
+        template_root = (
+            os.getenv("VISION_TEMPLATE_ROOT", "").strip()
+            or os.getenv("VISION_TEMPLATE_DIR", "").strip()
+            or "./runtime/vision/templates"
         )
+        self._template_store = TemplateStore(template_root)
         self._elements = element_resolver or ElementResolver(backend)
 
     def execute(self, steps: list[dict[str, Any]]) -> list[MacroStepResult]:
