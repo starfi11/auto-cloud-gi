@@ -201,6 +201,7 @@ class RunExecutor:
                 self._run_step(context, step)
                 if decision.next_state:
                     self._create_pending_transition(
+                        plan=plan,
                         context=context,
                         source_state=estimate.state,
                         target_state=decision.next_state,
@@ -216,6 +217,7 @@ class RunExecutor:
     def _create_pending_transition(
         self,
         *,
+        plan: WorkflowPlan,
         context: RunContext,
         source_state: str,
         target_state: str,
@@ -227,6 +229,13 @@ class RunExecutor:
         timeout_seconds = max(settle_seconds + 0.2, float(step.params.get("transition_timeout_seconds", 15.0)))
         require_observed = bool(step.params.get("transition_require_observed", False))
         required_observed_ticks = max(1, int(step.params.get("transition_observed_ticks", 2)))
+        auto_downgraded_observed = False
+        if require_observed:
+            target_node = plan.state_plan.node_for(target_state) if plan.state_plan is not None else None
+            has_recognition = bool(target_node and target_node.recognition)
+            if not has_recognition:
+                require_observed = False
+                auto_downgraded_observed = True
         context.pending_transition = {
             "source_state": source_state,
             "target_state": target_state,
@@ -251,6 +260,7 @@ class RunExecutor:
                 "timeout_seconds": timeout_seconds,
                 "require_observed": require_observed,
                 "required_observed_ticks": required_observed_ticks,
+                "auto_downgraded_observed": auto_downgraded_observed,
             },
         )
 
