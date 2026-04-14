@@ -1,0 +1,13 @@
+{
+  "overrides": {
+    "queue_strategy": "normal",
+    "assistant_log_root": "C:/Program Files/BetterGI/log",
+    "assistant_log_glob": "better-genshin-impact*.log",
+    "assistant_idle_seconds": 45,
+    "assistant_timeout_seconds": 5400,
+    "assistant_require_log_activity": true,
+    "use_text_signal_wait": false,
+    "text_signal_file": "./runtime/vision/signals/latest.txt",
+    "text_poll_seconds": 0.3
+  }
+}

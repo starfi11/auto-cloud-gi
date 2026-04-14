@@ -1,272 +1,126 @@
-# README
+# auto-cloud-gi
 
-## 项目简介
+## 项目定位
 
-本项目旨在构建一个稳定可用的**云游戏自动托管方案**，结合：
+这是一个正在重构中的**Python 自动化控制系统**，用于云游戏场景的任务编排。
 
-- **BetterGI**
-- **按量计费 ECS 云服务器**
-- **云游戏客户端**
-- **AHK 自动点击脚本 + 一条龙任务启动**
-- **AI 自动分析日志，判断日活是否完成**
-- **企业微信机器人发送日志反馈**
-- 依赖**云函数FC** + **WorkFlow** 的整体重试
+当前设计目标：
 
-实现可靠的**无需人工操作的自动化定时游戏日活执行 + 日志分析与推送**。
+- 事件驱动执行（非固定 sleep）
+- Action 子类建模（业务动作）
+- 运行时适配器解耦（实现策略）
+- 结构化日志与可中断运行
 
-部署好的本方案大概表现为：每天固定时间点 ECS 自动开机并执行自动化任务，自动化任务启动云游戏，根据选定的排队策略进行排队，直到进入游戏后启动 BetterGI ，执行日活（设置捕获窗口为云游戏窗口，然后启动 BetterGI 一条龙），最后将当天的 BetterGI 的日志与分析结果通过企业微信机器人推送，随后 ECS 到点自动关机。
+> 重要：项目已移除 AHK/BAT 依赖路线，后续识别/点击统一走 Python 库能力。
 
-项目提供简易的重试机制保证发生普通异常情况（如一条龙委托领取时未识别到橙色区域导致委托奖励领取失败）时，也能依靠外部重试保证当天最终日活一定无遗漏完成。但项目目前使用的技术栈是脚本，预计基于opencv重构后支持一些特殊异常情况的处理（云游戏更新、btgi更新、云游戏网络波动导致掉线）
+## 重构文档
 
-项目也支持执行过程截图上云，排查问题较为方便。
+- `docs/rebuild-blueprint.md`
+- `docs/rebuild-todo.md`
 
-## 项目结构
-
-| 文件名                   | 功能说明                    |
-| ------------------------ | --------------------------- |
-| `auto-cloud-GI.bat`      | 任务入口                    |
-| `config_example.ini`     | 配置示例                    |
-| `auto-cloud-gi-task.xml` | 注册任务的 XML              |
-| `/log`                   | 执行日志、过程截图          |
-| `/ahk`                   | 点击脚本                    |
-| `/utils`                 | 功能脚本                    |
-| `/optional`              | 扩展功能的外部使用配置/代码 |
-
----
-
-## 系统配置要求
-
-**本脚本适用于以下环境（其他环境请自行适配）**：
-
-- 云主机：阿里云 ECS `ecs.sgn8ia-m2.xlarge`（搭载 GPU）
-- 操作系统：Windows Server（推荐 Server 2019+）
-- 云游戏客户端：PC版
-- BetterGI：最新版本
-- 显示驱动：已正确安装 NVIDIA GRID 驱动、虚拟显示器驱动
-- VNC 环境：已部署 TightVNC Server 以绕开 RDP 键鼠输入限制
-
----
-
-## 使用步骤
-
-### 1️⃣ 云主机准备
-
-- 使用阿里云 ECS 创建带 GPU 的实例（如 `ecs.sgn8ia-m2.xlarge`）
-
----
-
-### 2️⃣ 安装基础依赖
-
-#### ✅ 安装显卡驱动（使用阿里云“云助手”执行）
-
-```powershell
-$InstalledPlugins = $(acs-plugin-manager --list --local)
-if ($($InstalledPlugins | Select-String "gpu_grid_driver_install")) {
-  acs-plugin-manager --remove --plugin gpu_grid_driver_install
-}
-acs-plugin-manager --fetchTimeout 0 --exec --plugin gpu_grid_driver_install
-```
-
-#### ✅ 安装 AHK
-
-#### ✅ 安装 pwsh
-
----
-
-### 3️⃣ 安装 VNC 和虚拟显示器驱动
-
-#### ❗ 重要：不要使用 RDP（远程桌面）执行脚本
-
-- 原因：RDP 可能导致鼠标输入异常，影响游戏和 BetterGI 控制
-
-#### ✅ 安装 TightVNC
-
-- 本地安装 Viewer
-- 远程服务器安装 Server
-
-#### ✅ 安装虚拟显示器驱动（Spacedesk）
-
-```powershell
-winget install --id=Datronicsoft.SpacedeskDriver.Server -e
-```
-
-然后进入系统的**显示设置**：
-
-- 设置“虚拟显示器（NVIDIA）”为主显示器
-- 或者设置“仅在该显示器上显示”
-- 分辨率调整为 `1920x1080`
-
----
-
-### 4️⃣ 配置企业微信机器人（日志推送）
-
-- 在企业微信群添加自定义机器人
-- 拿到 Webhook URL，填入 `send_wecom_log.bat` 中对应变量（`HOOK_KEY`）
-
----
-
-### 5️⃣ 填写路径配置（在 `config.ini` 中）
-
-根据实际路径修改以下项：
-
-```bat
-set BTGI_DIR=...
-set GI_EXE=...
-set AHK_SCRIPT_QUEUE=...
-set AHK_SCRIPT_BTGI=...
-set BAT_SEND_LOG=...
-```
-
----
-
-### 6️⃣ 设置自动启动
-
-- 使用 **Windows 任务计划程序** 配合提供的 `auto-cloud-gi-task.xml` 文件来设置自动启动
-- Win + R → `taskschd.msc`，使用 XML 文件导入任务
-- 通过配置注册表项 `AutoAdminLogon=1`，并设置 `DefaultUserName` 与 `DefaultPassword`，实现系统启动后自动跳过登录界面并直接进入桌面
-
----
-
-### 7️⃣ 配置 AI 日志分析
-
-- 支持通过 **大模型 API** 自动分析日志，判断每日任务是否完成  
-- 默认使用 Qwen Turbo 模型
-- 需要在 `config.ini` 中填写以下字段：  
-  ```ini
-  AI_BASE_URL=https://dashscope.aliyuncs.com/compatible/v1
-  AI_MODEL=qwen-turbo
-  AI_API_KEY=sk-xxxxxx 
-  ```
-
-### 8️⃣ 配置 bettergi
-
-- 手动将BETTERGI的截图器切换为windowsgraphicscapture
-- 根据需要修改一条龙配置
-
-## 已知问题 / 注意事项
-
-- 不支持远程桌面（RDP）环境下运行云游戏 + BetterGI 脚本
-- 分辨率需为 1920*1080
-- 在VNC连接情况下手动执行自动脚本尝试在云游戏上执行一条龙**可能**不会顺利地执行，画面也会很卡顿，但在无连接情况下执行是正常的
-- 企业微信机器人日志推送只支持文件大小在 20MB 以下
-- 所有脚本需以管理员身份运行
-- **避免**为入口 BAT 配置了复数个启动自动执行，这会导致执行异常
-- 保证自动化执行是在操作系统启动稳定后（XML中**已配置延迟执行**）
-- 建议在合适的时间定时执行
-- 建议选取合适的区域领取委托奖励
-
----
-
-## 扩展功能
-
-在 `config.ini` 中，有这样复数个扩展功能。
+## 快速开始
 
 ```bash
-[Features]
-; 功能开关 ( true/false ) 决定是否启用对应功能，布尔值后面不要加注释/空格
-; 启用屏幕取样功能
-Enable_ScreenSampler=false
-; 启用企业微信日志推送功能
-Enable_WeComLog=true
-; 启用AI日志分析功能
-Enable_AI_Summary=true
-; 启用网盘上传屏幕采样功能
-Enable_QuarkUpload=false
-; 启用云函数重试功能，在AI日志分析结果为失败时触发云函数重试
-Enable_FcRetry=false
-; 云游戏排队策略： 普通排队、快速排队、云游戏会员队列
-Queue_Strategy=enter_genshin_queue.ahk
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python3 -m src.app.bootstrap
 ```
 
-下面展示功能间的依赖关系，开启上级功能时需要同时开启其依赖功能。
+## 配置说明
 
-```
-屏幕取样-->网盘上传
-AI日志分析-->云函数重试
-```
+使用 `.env` 配置运行参数，核心项：
 
-下面详细讲解各个功能的配置和使用方法
+- `AUTOMATION_DEFAULT_PROFILE=genshin_cloud_bettergi`
+- `GAME_RUNTIME_MODE=python_native`
+- `ASSISTANT_RUNTIME_MODE=python_native`
+- `COMMAND_SOURCE_FILE=./runtime/commands/inbox.json`
 
-### 企业微信日志推送
+可选 profile：
 
-```
-HOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxxxxxxxxxx
-HOOK_KEY=xxxxxxxxxxxx
-LOG_DIR=C:\Program Files\BetterGI\log
-```
+- `genshin_cloud_bettergi`：云原神 + BetterGI
+- `genshin_pc_bettergi`：本地原神 + BetterGI
 
-### AI日志分析
+## 控制接口
 
-```
-[AI]
-; 百炼Key
-AI_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-AI_MODEL=qwen-turbo
-AI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
-; 可选：分析日志的末尾行数（不配则默认600）
-AI_TAIL=600
-```
+- `POST /api/v1/runs`
+- `POST /api/v1/runs/dry-run`
+- `GET /api/v1/runs/{run_id}`
+- `POST /api/v1/runs/{run_id}/interrupt`
+- `POST /api/v1/runs/{run_id}/risk`
 
-### 屏幕采样与网盘上传
-
-屏幕采样将开关置为true即可，网盘上传目前依赖这样的逻辑：提前在浏览器中登录好网盘账号，并进行一次上传，上传在log/screens文件夹下的某个文件。
-
-通过最开始的这一次上传，后续每次在网页端中点击上传时，打开的都会是log/screens的文件目录，此时，程序会保证每次上传时log/screens目录里只有日期为名称的文件夹及其压缩包。通过这样固定的点击完成每天的上传。
-
-### FC & WorkFlow重试
-
-需要将optional/gi-retry中的`index.js`部署为云函数，`auto-cloud-gi-workflow`部署为workflow，`env_example.json`作为FC的环境变量配置。
-
-需要注意的是，还需要为gi-retry这一功能申请一个权限策略，创建两个角色，分别绑定到workflow和fc上。权限策略分别为fc：启动workflow、表格存储读写；workflow：ECS启动、节省关闭。
-
-主要在做这样的事：每天的执行结果（AI分析结果）会发送到云函数处，云函数接收后执行，如果内容为运行异常，则尝试执行调workflow执行重试逻辑，否则结束。云函数在表格存储中维护了上次重试时间与上次重试当天的总重试次数，以保证每天重试次数不超过指定次数。满足条件时，云函数会调workflow让其去做重试逻辑，然后结束云函数生命周期。
-
-比较麻烦是权限策略配置、角色创建、相关服务开通，相关配置后续补上。
-
-### 实时监测
-
-实时监测过程中的截图，出现意外情况时发出告警。
-
-环境部署与配置：
-
-在config.ini中将实时监测相关的开关打开，配置图像大模型API，当本地文本识别判断出现意外情况时会调用API进行判断。保证每次任务期间调用API次数不超过三次。
-
-
-
-https://www.python.org/downloads/windows/
-
-选择 python 3.10.x 并下载 Windows installer 进行安装（勾选add to PATH）
+示例：
 
 ```bash
-python --version
-pip --version
+curl -X POST http://127.0.0.1:8788/api/v1/runs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "trigger": "API_TRIGGER",
+    "idempotency_key": "demo-001",
+    "target_profile": "genshin_cloud_bettergi",
+    "scenario": "daily_default",
+    "requested_policy_override": {}
+  }'
 ```
 
-
+切换本地原神：
 
 ```bash
-# 可选：升级 pip
-python -m pip install --upgrade pip
-
-# Web 服务 + HTTP 请求
-python -m pip install flask requests
-
-# 图像读取 + 裁剪中心 60%
-python -m pip install opencv-python pillow
-
-# PaddleOCR（带 OCR 能力）
-# 先装 paddlepaddle，再装 paddleocr
-python -m pip install paddlepaddle
-python -m pip install "paddleocr[all]"
-
+curl -X POST http://127.0.0.1:8788/api/v1/runs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "trigger": "API_TRIGGER",
+    "idempotency_key": "demo-pc-001",
+    "target_profile": "genshin_pc_bettergi",
+    "scenario": "daily_default",
+    "requested_policy_override": {}
+  }'
 ```
 
+## 当前状态
 
+已完成：
 
-## 声明
+- 核心编排骨架（Orchestrator / RunExecutor / State）
+- Action 子类分发与执行
+- 运行中断与风险抢占
+- 幂等与运行记录持久化
+- 结构化日志（system/control-api/run）
 
-> 本项目仅供 **个人学习与研究自动化技术** 使用。
->
-> 不涉及任何账号信息，不修改或绕过任何第三方系统机制，不用于生产环境。
->
-> 所有风险由使用者自行承担，作者不对任何使用结果负责。
+待完成：
+
+- Python-native 识别与点击的真实实现
+- 场景判定多信号融合（OCR/图标/窗口状态）
+- 云端调度闭环（SchedulerPort 生产实现）
+
+## v2 迁移适配参数（RunRequest.overrides）
+
+可通过 `requested_policy_override` 调整云原神/BetterGI行为：
+
+- `queue_strategy`: `normal|quick|none`
+- `assistant_log_root`: BetterGI 日志目录
+- `assistant_log_glob`: 日志匹配（如 `better-genshin-impact*.log`）
+- `assistant_idle_seconds`: 日志静默多久视为完成
+- `assistant_timeout_seconds`: 最长等待时间
+- `assistant_require_log_activity`: 是否要求先观察到日志增长
+
+其中 BetterGI 完成判定采用通用“日志活动监听器”而非硬编码 BetterGI 逻辑。
+
+## 视觉资源与信号目录约定
+
+- 文本信号文件：`runtime/vision/signals/latest.txt`
+- 图标模板根目录：`runtime/vision/templates`
+
+建议模板组织方式：
+
+- `runtime/vision/templates/genshin_cloud_bettergi/*.png`
+- `runtime/vision/templates/<profile_name>/*.png`
+
+当前已接入“文本信号等待”用于 `wait_game_ready`：
+
+- `scene_ready_text_any`
+- `scene_block_text_any`
+- `text_signal_file`
+
+图标出现/消失检测接口与模板目录已预留，具体匹配逻辑可在你准备好模板后接入。

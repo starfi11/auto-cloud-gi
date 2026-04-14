@@ -1,0 +1,14 @@
+[project]
+name = "auto-cloud-gi-kernel"
+version = "0.1.0"
+description = "Kernel-first refactor for auto-cloud-gi"
+requires-python = ">=3.11"
+dependencies = [
+  "pyautogui>=0.9.54",
+]
+
+[project.scripts]
+acgi-control-api = "src.app.bootstrap:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,10 +1,41 @@
+# Local/private
+.env
+.codex
+.ref/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Runtime outputs (keep runtime configs/assets)
+runtime/logs/
+runtime/checkpoints/
+runtime/manifests/
+runtime/state/
+runtime/tmp/
+runtime/**/*.tmp
+runtime/vision/signals/latest.txt
+
+# Legacy files
 config.ini
 send_result.json
 utils/send_result.json
 auto-cloud-GI.bat - 快捷方式
 test.ps1
-logs
-driver
+logs/
+driver/
+
+# Optional node workflow cache
 /optional/gi-retry/.npm-cache/
 /optional/gi-retry/node_modules/
 /optional/gi-retry/package-lock.json
