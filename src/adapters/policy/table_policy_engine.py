@@ -70,6 +70,20 @@ class TablePolicyEngine(PolicyEnginePort):
             )
 
         if estimate.confidence < 0.4:
+            if node.action is None:
+                low_conf_key = f"_state_low_conf:{current_state}"
+                low_conf_ticks = int(context.retries.get(low_conf_key, 0)) + 1
+                context.retries[low_conf_key] = low_conf_ticks
+                waited_seconds = low_conf_ticks * max(0.1, node.wait_seconds)
+                stuck_timeout_seconds = self._state_stuck_timeout_seconds(context)
+                if waited_seconds >= stuck_timeout_seconds:
+                    return PolicyDecision(
+                        kind="fail",
+                        error=f"state_stuck_no_signal:{current_state}:waited={round(waited_seconds, 1)}s",
+                        reason="state_stuck_no_signal",
+                        controller_id=node.controller_id,
+                        context_id=node.context_id,
+                    )
             return PolicyDecision(
                 kind="wait",
                 reason=f"low_confidence:{round(estimate.confidence, 3)}",
@@ -77,6 +91,7 @@ class TablePolicyEngine(PolicyEnginePort):
                 controller_id=node.controller_id,
                 context_id=node.context_id,
             )
+        context.retries.pop(f"_state_low_conf:{current_state}", None)
 
         if node.action is not None:
             return PolicyDecision(
@@ -104,3 +119,15 @@ class TablePolicyEngine(PolicyEnginePort):
             context_id=node.context_id,
             reason="state_wait",
         )
+
+    def _state_stuck_timeout_seconds(self, context: RunContext) -> float:
+        default_seconds = 25.0
+        manifest = context.manifest if isinstance(context.manifest, dict) else {}
+        effective_policy = manifest.get("effective_policy", {})
+        if not isinstance(effective_policy, dict):
+            return default_seconds
+        raw = effective_policy.get("state_stuck_timeout_seconds", default_seconds)
+        try:
+            return max(5.0, float(raw))
+        except Exception:
+            return default_seconds
