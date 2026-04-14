@@ -38,7 +38,7 @@ class PaddleOcrEngine(OcrEnginePort):
 
         self.last_text = ""
         paddle_lang = _normalize_paddle_lang(lang)
-        ocr_version = os.getenv("PADDLE_OCR_VERSION", "PP-OCRv5_mobile").strip() or "PP-OCRv5_mobile"
+        ocr_version = os.getenv("PADDLE_OCR_VERSION", "PP-OCRv5").strip() or "PP-OCRv5"
         use_doc_orientation_classify = _bool_env("PADDLE_OCR_USE_DOC_ORIENTATION", default=False)
         use_doc_unwarping = _bool_env("PADDLE_OCR_USE_DOC_UNWARPING", default=False)
         use_textline_orientation = _bool_env("PADDLE_OCR_USE_TEXTLINE_ORI", default=False)
