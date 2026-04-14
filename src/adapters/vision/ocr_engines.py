@@ -36,13 +36,8 @@ class PaddleOcrEngine(OcrEnginePort):
 
         self.last_text = ""
         paddle_lang = _normalize_paddle_lang(lang)
-        use_angle_cls = _bool_env("PADDLE_OCR_USE_ANGLE_CLS", default=False)
-        # PaddleOCR parameters differ across versions.
-        # Start with a richer arg set and gracefully degrade to a minimal init.
-        try:
-            self._ocr = PaddleOCR(use_angle_cls=use_angle_cls, lang=paddle_lang)
-        except Exception:
-            self._ocr = PaddleOCR(lang=paddle_lang)
+        # Fixed runtime contract: PaddleOCR 3.x style init.
+        self._ocr = PaddleOCR(lang=paddle_lang)
 
     def read_text(self, image: Any) -> str:
         try:
@@ -52,21 +47,19 @@ class PaddleOcrEngine(OcrEnginePort):
             if arr.ndim == 3 and arr.shape[2] >= 3:
                 # PIL is RGB, Paddle/OpenCV path prefers BGR.
                 arr = arr[:, :, ::-1]
-            # result: [ [ [box], (text, score) ], ... ] or nested by page
-            result = self._ocr.ocr(arr, cls=False)
+            # Fixed runtime contract: PaddleOCR 3.x style inference.
+            result = self._ocr.predict(arr)
             lines: list[str] = []
             if isinstance(result, list):
                 for page in result:
-                    if not isinstance(page, list):
+                    if isinstance(page, dict):
+                        rec_texts = page.get("rec_texts")
+                        if isinstance(rec_texts, list):
+                            lines.extend([str(x).strip() for x in rec_texts if str(x).strip()])
                         continue
-                    for item in page:
-                        if not isinstance(item, (list, tuple)) or len(item) < 2:
-                            continue
-                        rec = item[1]
-                        if isinstance(rec, (list, tuple)) and len(rec) >= 1:
-                            txt = str(rec[0]).strip()
-                            if txt:
-                                lines.append(txt)
+                    rec_texts = getattr(page, "rec_texts", None)
+                    if isinstance(rec_texts, list):
+                        lines.extend([str(x).strip() for x in rec_texts if str(x).strip()])
             text = "\n".join(lines)
             self.last_text = text
             return text
