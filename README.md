@@ -28,6 +28,24 @@ cp .env.example .env
 python3 -m src.app.bootstrap
 ```
 
+Windows / PowerShell 可直接用一条 Python 命令发起烟测，避免手写 `Invoke-RestMethod`：
+
+```powershell
+python .\scripts\smoke_run.py --wait
+```
+
+仅创建 run（不等待）：
+
+```powershell
+python .\scripts\smoke_run.py
+```
+
+跟踪已有 run：
+
+```powershell
+python .\scripts\smoke_run.py --run-id <run_id>
+```
+
 ## 配置说明
 
 使用 `.env` 配置运行参数，核心项：
