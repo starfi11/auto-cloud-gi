@@ -14,9 +14,21 @@ class TablePolicyEngine(PolicyEnginePort):
 
         observed_state = estimate.state
         current_state = context.state or state_plan.initial_state
+        if current_state in state_plan.terminal_states:
+            return PolicyDecision(kind="finish", reason="terminal_state_reached")
 
-        # Recognizer-driven transition: recognizer reports a different state with enough confidence.
-        if observed_state != current_state and observed_state:
+        current_node = state_plan.node_for(current_state)
+        if current_node is None:
+            return PolicyDecision(
+                kind="fail",
+                error=f"unknown_state:{current_state}",
+                reason="state_not_in_plan",
+            )
+
+        # Recognizer-driven transition is allowed only in observation states (no bound action).
+        # Action states must execute their action first, otherwise we may skip critical side effects.
+        can_sync_by_observation = current_node.action is None
+        if can_sync_by_observation and observed_state != current_state and observed_state:
             observed_node = state_plan.node_for(observed_state)
             if observed_state in state_plan.terminal_states and estimate.confidence >= 0.65:
                 return PolicyDecision(kind="finish", reason="terminal_state_observed")
@@ -41,16 +53,7 @@ class TablePolicyEngine(PolicyEnginePort):
                     reason="observed_state_sync",
                 )
 
-        if current_state in state_plan.terminal_states:
-            return PolicyDecision(kind="finish", reason="terminal_state_reached")
-
-        node = state_plan.node_for(current_state)
-        if node is None:
-            return PolicyDecision(
-                kind="fail",
-                error=f"unknown_state:{current_state}",
-                reason="state_not_in_plan",
-            )
+        node = current_node
 
         stable_key = f"_state_seen:{current_state}"
         seen = int(context.retries.get(stable_key, 0)) + 1
