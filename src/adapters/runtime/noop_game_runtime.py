@@ -50,5 +50,9 @@ class NoopGameRuntimeAdapter(GameRuntimePort):
                 return {"ok": False, "detail": "noop_scene_timeout", "elapsed_seconds": round(elapsed, 3)}
             sleep(0.05)
 
+    def claim_kongyue(self, options: dict[str, Any]) -> dict[str, Any]:
+        sleep(0.01)
+        return {"ok": True, "detail": "noop_kongyue_claim", "options": options}
+
     def stop(self) -> dict[str, Any]:
         return {"ok": True, "detail": "noop_game_stop"}

@@ -38,6 +38,8 @@ class StateNode:
     action: ActionIntent | None = None
     next_state: str | None = None
     wait_seconds: float = 0.2
+    stable_ticks: int = 1
+    recognition: dict[str, Any] = field(default_factory=dict)
     controller_id: str | None = None
     context_id: str | None = None
 
@@ -90,6 +92,8 @@ class WorkflowPlan:
                         "state": n.state,
                         "next_state": n.next_state,
                         "wait_seconds": n.wait_seconds,
+                        "stable_ticks": n.stable_ticks,
+                        "recognition": n.recognition,
                         "controller_id": n.controller_id,
                         "context_id": n.context_id,
                         "action": (
@@ -155,6 +159,12 @@ class WorkflowPlan:
                         action=action,
                         next_state=(str(raw_node["next_state"]) if raw_node.get("next_state") is not None else None),
                         wait_seconds=float(raw_node.get("wait_seconds", 0.2)),
+                        stable_ticks=max(1, int(raw_node.get("stable_ticks", 1))),
+                        recognition=(
+                            dict(raw_node.get("recognition", {}))
+                            if isinstance(raw_node.get("recognition"), dict)
+                            else {}
+                        ),
                         controller_id=(str(raw_node["controller_id"]) if raw_node.get("controller_id") is not None else None),
                         context_id=(str(raw_node["context_id"]) if raw_node.get("context_id") is not None else None),
                     )

@@ -1,0 +1,147 @@
+{
+  "elements": [
+    {
+      "id": "cloud_daily_reward_keyword",
+      "profile": "genshin_cloud",
+      "roi": [520, 120, 560, 220],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["每日登录奖励"]}]
+    },
+    {
+      "id": "cloud_free_time_keyword",
+      "profile": "genshin_cloud",
+      "roi": [520, 120, 560, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["免费时长"]}]
+    },
+    {
+      "id": "cloud_click_blank_close_keyword",
+      "profile": "genshin_cloud",
+      "roi": [660, 760, 420, 140],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["点击空白区域关闭"]}]
+    },
+    {
+      "id": "cloud_claim_gift_close",
+      "profile": "genshin_cloud",
+      "roi": [720, 760, 360, 120],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["点击空白区域关闭", "点击空白区域"]}]
+    },
+    {
+      "id": "cloud_start_game_button",
+      "profile": "genshin_cloud",
+      "roi": [1180, 740, 360, 150],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["开始游戏", "进入游戏"]}]
+    },
+    {
+      "id": "cloud_queue_normal_button",
+      "profile": "genshin_cloud",
+      "roi": [780, 550, 360, 180],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["普通队列", "普通排队"]}]
+    },
+    {
+      "id": "cloud_queue_quick_button",
+      "profile": "genshin_cloud",
+      "roi": [760, 410, 380, 170],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["快速排队", "优先队列"]}]
+    },
+    {
+      "id": "cloud_queue_exit_text",
+      "profile": "genshin_cloud",
+      "roi": [160, 90, 260, 100],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["退出排队"]}]
+    },
+    {
+      "id": "cloud_queue_eta_text",
+      "profile": "genshin_cloud",
+      "roi": [620, 100, 360, 100],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["预计等待时间"]}]
+    },
+    {
+      "id": "cloud_door_enter",
+      "profile": "genshin_cloud",
+      "roi": [730, 820, 320, 100],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["点击进入"]}]
+    },
+    {
+      "id": "cloud_kongyue_reward_text",
+      "profile": "genshin_cloud",
+      "roi": [660, 840, 420, 140],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["点击领取今日空月祝福奖励", "空月祝福奖励"]}]
+    },
+    {
+      "id": "cloud_in_game_num_1",
+      "profile": "genshin_cloud",
+      "roi": [1380, 240, 120, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["1"]}]
+    },
+    {
+      "id": "cloud_in_game_num_2",
+      "profile": "genshin_cloud",
+      "roi": [1380, 240, 120, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["2"]}]
+    },
+    {
+      "id": "cloud_in_game_num_3",
+      "profile": "genshin_cloud",
+      "roi": [1380, 240, 120, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["3"]}]
+    },
+    {
+      "id": "cloud_in_game_num_4",
+      "profile": "genshin_cloud",
+      "roi": [1380, 240, 120, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["4"]}]
+    },
+    {
+      "id": "btgi_update_popup",
+      "profile": "bettergi",
+      "roi": [880, 620, 560, 260],
+      "base_size": [1600, 900],
+      "matchers": [
+        {"kind": "text_ocr", "text_any": ["立即更新"]},
+        {"kind": "template", "template_key": "btgi_update", "confidence": 0.9}
+      ]
+    },
+    {
+      "id": "btgi_update_ignore_button",
+      "profile": "bettergi",
+      "roi": [980, 760, 420, 140],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["不再提示", "忽略"]}]
+    },
+    {
+      "id": "btgi_home",
+      "profile": "bettergi",
+      "roi": [1030, 480, 420, 220],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "template", "template_key": "btgi_home", "confidence": 0.9}]
+    },
+    {
+      "id": "btgi_screenshot_dropdown_settings",
+      "profile": "bettergi",
+      "roi": [1150, 430, 360, 230],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "template", "template_key": "btgi_screenshot_dropdown_settings", "confidence": 0.9}]
+    },
+    {
+      "id": "btgi_one_click_start_button",
+      "profile": "bettergi",
+      "roi": [700, 200, 620, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "template", "template_key": "btgi_one_click_start_button", "confidence": 0.9}]
+    }
+  ]
+}

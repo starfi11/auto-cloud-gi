@@ -5,6 +5,7 @@ description = "Kernel-first refactor for auto-cloud-gi"
 requires-python = ">=3.10"
 dependencies = [
   "pyautogui>=0.9.54",
+  "pytesseract>=0.3.10",
 ]
 
 [project.scripts]

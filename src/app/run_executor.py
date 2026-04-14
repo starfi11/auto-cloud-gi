@@ -33,6 +33,7 @@ class RunExecutor:
         "game.launch": Stage.START_CLOUD_GI,
         "game.queue.enter": Stage.ENTER_QUEUE,
         "game.wait.scene": Stage.WAIT_GAME_READY,
+        "game.kongyue.claim": Stage.WAIT_GAME_READY,
         "assistant.launch": Stage.START_AND_DRIVE_BTGI,
         "assistant.drive": Stage.MONITOR_AND_GUARD,
         "system.collect": Stage.COLLECT_RESULT,
@@ -100,6 +101,8 @@ class RunExecutor:
 
         for tick in range(state_plan.max_ticks):
             self._check_preempt(context)
+            if self._process_pending_transition(context, plan, tick):
+                continue
             estimate = self._state_estimator.estimate(context, plan)
             self._logs.run_event(
                 context.run_id,
@@ -197,12 +200,125 @@ class RunExecutor:
                     self._transition(context, str(stage), reason=f"intent:{step.name}")
                 self._run_step(context, step)
                 if decision.next_state:
-                    self._transition(context, decision.next_state, reason=f"action_success:{step.name}")
+                    self._create_pending_transition(
+                        context=context,
+                        source_state=estimate.state,
+                        target_state=decision.next_state,
+                        reason=f"action_success:{step.name}",
+                        step=step,
+                    )
                 continue
 
             raise RuntimeError(f"unsupported_policy_decision:{decision.kind}")
 
         raise RuntimeError(f"state_driven_tick_limit_exceeded:max_ticks={state_plan.max_ticks}")
+
+    def _create_pending_transition(
+        self,
+        *,
+        context: RunContext,
+        source_state: str,
+        target_state: str,
+        reason: str,
+        step: WorkflowStep,
+    ) -> None:
+        now = perf_counter()
+        settle_seconds = max(0.0, float(step.params.get("transition_settle_seconds", 0.3)))
+        timeout_seconds = max(settle_seconds + 0.2, float(step.params.get("transition_timeout_seconds", 15.0)))
+        require_observed = bool(step.params.get("transition_require_observed", False))
+        required_observed_ticks = max(1, int(step.params.get("transition_observed_ticks", 2)))
+        context.pending_transition = {
+            "source_state": source_state,
+            "target_state": target_state,
+            "reason": reason,
+            "created_at": now,
+            "not_before": now + settle_seconds,
+            "deadline": now + timeout_seconds,
+            "settle_seconds": settle_seconds,
+            "timeout_seconds": timeout_seconds,
+            "require_observed": require_observed,
+            "required_observed_ticks": required_observed_ticks,
+            "observed_ticks": 0,
+        }
+        self._logs.run_event(
+            context.run_id,
+            "transition_pending_set",
+            {
+                "source_state": source_state,
+                "target_state": target_state,
+                "reason": reason,
+                "settle_seconds": settle_seconds,
+                "timeout_seconds": timeout_seconds,
+                "require_observed": require_observed,
+                "required_observed_ticks": required_observed_ticks,
+            },
+        )
+
+    def _process_pending_transition(self, context: RunContext, plan: WorkflowPlan, tick: int) -> bool:
+        pending = context.pending_transition
+        if not pending:
+            return False
+
+        target_state = str(pending.get("target_state", "")).strip()
+        if not target_state:
+            context.pending_transition = {}
+            return False
+
+        now = perf_counter()
+        deadline = float(pending.get("deadline", now + 0.2))
+        if now > deadline:
+            raise RuntimeError(
+                "transition_timeout:"
+                f"{pending.get('source_state', '')}->{target_state},"
+                f"reason={pending.get('reason', '')}"
+            )
+
+        require_observed = bool(pending.get("require_observed", False))
+        if self._state_estimator is not None:
+            estimate = self._state_estimator.estimate(context, plan)
+            if estimate.state == target_state:
+                pending["observed_ticks"] = int(pending.get("observed_ticks", 0)) + 1
+            else:
+                pending["observed_ticks"] = 0
+
+            self._logs.replay_event(
+                context.run_id,
+                "transition_observe",
+                {
+                    "tick": tick,
+                    "pending_target_state": target_state,
+                    "observed_state": estimate.state,
+                    "observed_ticks": int(pending.get("observed_ticks", 0)),
+                    "required_observed_ticks": int(pending.get("required_observed_ticks", 1)),
+                    "require_observed": require_observed,
+                },
+            )
+
+        not_before = float(pending.get("not_before", now))
+        if now < not_before:
+            sleep(0.05)
+            return True
+
+        if require_observed:
+            observed = int(pending.get("observed_ticks", 0))
+            required = max(1, int(pending.get("required_observed_ticks", 1)))
+            if observed < required:
+                sleep(0.05)
+                return True
+
+        self._transition(context, target_state, reason=str(pending.get("reason", "pending_transition_committed")))
+        self._logs.run_event(
+            context.run_id,
+            "transition_pending_committed",
+            {
+                "source_state": pending.get("source_state", ""),
+                "target_state": target_state,
+                "reason": pending.get("reason", ""),
+                "observed_ticks": int(pending.get("observed_ticks", 0)),
+            },
+        )
+        context.pending_transition = {}
+        return True
 
     def _log_policy_decision(self, context: RunContext, tick: int, state: str, decision: PolicyDecision) -> None:
         payload: dict[str, Any] = {
@@ -256,6 +372,8 @@ class RunExecutor:
         context.state = target
         context.layered_state.global_layer.state = target
         context.layered_state.global_layer.last_reason = reason
+        for key in [k for k in context.retries.keys() if k.startswith("_state_seen:")]:
+            context.retries.pop(key, None)
         self._checkpoints.save(context)
         self._logs.state_transition(context.run_id, source, context.state, reason=reason)
         self._logs.replay_event(

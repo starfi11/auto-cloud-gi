@@ -5,6 +5,7 @@ from typing import Callable
 
 from src.domain.actions import (
     Action,
+    ClaimKongyueAction,
     CollectArtifactsAction,
     DriveAssistantAction,
     EnterQueueAction,
@@ -39,6 +40,8 @@ class ActionDispatcher:
                 interrupt_probe=(lambda: self.interrupt_check(context.run_id)) if self.interrupt_check else None,
                 risk_probe=(lambda: self.risk_check(context.run_id)) if self.risk_check else None,
             )
+        if step.kind == "game.kongyue.claim":
+            return ClaimKongyueAction(step=step, game_runtime=self.game_runtime)
         if step.kind == "assistant.launch":
             return LaunchAssistantAction(step=step, assistant_runtime=self.assistant_runtime)
         if step.kind == "assistant.drive":

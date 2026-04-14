@@ -74,6 +74,15 @@ class WaitGameReadyAction(Action):
 
 
 @dataclass
+class ClaimKongyueAction(Action):
+    step: WorkflowStep
+    game_runtime: GameRuntimePort
+
+    def execute(self, context: RunContext) -> dict[str, Any]:
+        return self.game_runtime.claim_kongyue(self._with_context_meta(context))
+
+
+@dataclass
 class LaunchAssistantAction(Action):
     step: WorkflowStep
     assistant_runtime: AssistantRuntimePort

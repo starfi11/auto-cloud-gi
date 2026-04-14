@@ -18,9 +18,11 @@ class ProfileMappingTest(unittest.TestCase):
                 },
             )
         )
-        enter_step = [s for s in plan.steps if s.name == "enter_queue"][0]
+        enter_step = [s for s in plan.steps if s.name == "select_queue"][0]
         drive_step = [s for s in plan.steps if s.name == "drive_companion"][0]
-        self.assertEqual(enter_step.params.get("strategy"), "quick")
+        queue_steps = list(enter_step.params.get("queue_macro_steps", []))
+        self.assertTrue(queue_steps)
+        self.assertIn("cloud_queue_quick_button", str(queue_steps))
         self.assertIn("assistant_log_root", drive_step.params)
         self.assertIn("assistant_log_glob", drive_step.params)
 

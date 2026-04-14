@@ -55,10 +55,9 @@ python .\scripts\smoke_run.py --run-id <run_id>
 - `ASSISTANT_RUNTIME_MODE=python_native`
 - `COMMAND_SOURCE_FILE=./runtime/commands/inbox.json`
 
-可选 profile：
+当前启用 profile：
 
 - `genshin_cloud_bettergi`：云原神 + BetterGI
-- `genshin_pc_bettergi`：本地原神 + BetterGI
 
 ## 控制接口
 
@@ -82,19 +81,7 @@ curl -X POST http://127.0.0.1:8788/api/v1/runs \
   }'
 ```
 
-切换本地原神：
-
-```bash
-curl -X POST http://127.0.0.1:8788/api/v1/runs \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "trigger": "API_TRIGGER",
-    "idempotency_key": "demo-pc-001",
-    "target_profile": "genshin_pc_bettergi",
-    "scenario": "daily_default",
-    "requested_policy_override": {}
-  }'
-```
+其他 profile 作为扩展位保留，不在当前默认运行集内。
 
 ## 当前状态
 
@@ -129,6 +116,7 @@ curl -X POST http://127.0.0.1:8788/api/v1/runs \
 
 - 文本信号文件：`runtime/vision/signals/latest.txt`
 - 图标模板根目录：`runtime/vision/templates`
+- UI 元素定义：`runtime/vision/elements.json`
 
 建议模板组织方式：
 
@@ -142,3 +130,18 @@ curl -X POST http://127.0.0.1:8788/api/v1/runs \
 - `text_signal_file`
 
 图标出现/消失检测接口与模板目录已预留，具体匹配逻辑可在你准备好模板后接入。
+
+## UI Element（文本优先，模板兜底）
+
+动作层支持 `click_element / wait_element`。解析策略：
+
+1. 先按 ROI 做 OCR 文本匹配（低开销）。
+2. ROI 失败后自动扩圈。
+3. 仍失败则全局模板匹配兜底。
+
+默认元素定义文件：`runtime/vision/elements.json`，可通过环境变量覆盖：
+
+- `VISION_ELEMENT_SPEC`
+- `VISION_TEMPLATE_ROOT`
+
+OCR 引擎默认尝试 `pytesseract`（未安装会自动退化为仅模板匹配）。

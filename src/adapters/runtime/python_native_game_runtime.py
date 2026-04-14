@@ -6,6 +6,7 @@ from time import monotonic, sleep
 from typing import Any, Callable
 
 from src.adapters.action_specs import cloud_queue_macro
+from src.adapters.drivers import GenshinCloudDriver
 from src.adapters.runtime.process_registry import ProcessRegistry
 from src.adapters.vision import FileTextSignalSource, TextSignalWaiter, TextWaitSpec
 from src.adapters.runtime.ui_macro import UiMacroExecutor, build_ui_backend
@@ -23,6 +24,7 @@ class PythonNativeGameRuntimeAdapter(GameRuntimePort):
     def __init__(self) -> None:
         backend_mode = os.getenv("UI_AUTOMATION_BACKEND", "auto")
         self._macro = UiMacroExecutor(build_ui_backend(backend_mode))
+        self._driver = GenshinCloudDriver(self._macro)
         self._text_waiter = TextSignalWaiter()
         self._processes = ProcessRegistry()
         self._strict = _env_bool("PY_RUNTIME_STRICT", default=False)
@@ -56,17 +58,7 @@ class PythonNativeGameRuntimeAdapter(GameRuntimePort):
     def enter_queue(self, options: dict[str, Any]) -> dict[str, Any]:
         strategy = str(options.get("strategy", "normal")).strip().lower()
         steps = list(options.get("queue_macro_steps", []))
-        if not steps:
-            steps = self._default_queue_macro(strategy)
-
-        results = self._macro.execute(steps)
-        failed = [r for r in results if not r.ok]
-        return {
-            "ok": len(failed) == 0,
-            "retryable": True,
-            "detail": "queue_macro_done" if not failed else f"queue_macro_failed:{len(failed)}",
-            "macro_results": [r.__dict__ for r in results],
-        }
+        return self._driver.enter_queue(strategy=strategy, extra_steps=(steps or None))
 
     def wait_scene_ready(
         self,
@@ -79,10 +71,65 @@ class PythonNativeGameRuntimeAdapter(GameRuntimePort):
         ready_flag_file = str(options.get("ready_flag_file", "")).strip()
         ready_text_any = [str(s) for s in options.get("scene_ready_text_any", [])]
         block_text_any = [str(s) for s in options.get("scene_block_text_any", [])]
+        ready_element_id = str(options.get("ready_element_id", "")).strip()
+        ready_element_profile = str(options.get("ready_element_profile", "default")).strip() or "default"
         text_signal_file = str(
             options.get("text_signal_file") or os.getenv("VISION_TEXT_SIGNAL_FILE", "./runtime/vision/signals/latest.txt")
         ).strip()
         t0 = monotonic()
+
+        if ready_element_id:
+            while True:
+                if risk_check is not None:
+                    hit, reason = risk_check()
+                    if hit:
+                        return {
+                            "ok": False,
+                            "retryable": False,
+                            "risk_stopped": True,
+                            "detail": f"risk_stop:{reason or 'risk_detected'}",
+                        }
+                if interrupt_check is not None:
+                    hit, reason = interrupt_check()
+                    if hit:
+                        return {
+                            "ok": False,
+                            "retryable": False,
+                            "interrupted": True,
+                            "detail": f"interrupted:{reason or 'manual_interrupt'}",
+                        }
+                rs = self._macro.execute(
+                    [
+                        {
+                            "op": "wait_element",
+                            "element_id": ready_element_id,
+                            "element_profile": ready_element_profile,
+                            "timeout_seconds": float(options.get("element_poll_window_seconds", 1.0)),
+                            "poll_seconds": float(options.get("text_poll_seconds", 0.3)),
+                            "optional": True,
+                        }
+                    ]
+                )
+                if rs and rs[0].ok and not str(rs[0].detail).startswith("element_optional_miss"):
+                    post = self._run_post_ready_macro(options)
+                    if post is not None:
+                        return post
+                    return {
+                        "ok": True,
+                        "retryable": False,
+                        "detail": "scene_ready_by_ui_element",
+                        "elapsed_seconds": round(monotonic() - t0, 3),
+                        "evidence_refs": [f"ui_element:{ready_element_id}"],
+                    }
+                elapsed = monotonic() - t0
+                if elapsed >= timeout_seconds:
+                    return {
+                        "ok": False,
+                        "retryable": True,
+                        "detail": "wait_scene_timeout",
+                        "elapsed_seconds": round(elapsed, 3),
+                    }
+                sleep(max(0.05, float(options.get("text_poll_seconds", 0.3))))
 
         if ready_text_any:
             text_result = self._text_waiter.wait_until_ready(
@@ -159,6 +206,10 @@ class PythonNativeGameRuntimeAdapter(GameRuntimePort):
             "elapsed_seconds": round(monotonic() - t0, 3),
         }
 
+    def claim_kongyue(self, options: dict[str, Any]) -> dict[str, Any]:
+        steps = list(options.get("kongyue_macro_steps", []))
+        return self._driver.claim_kongyue(steps=(steps or None))
+
     def stop(self) -> dict[str, Any]:
         status = self._processes.status("game")
         terminated = self._processes.terminate("game")
@@ -176,13 +227,7 @@ class PythonNativeGameRuntimeAdapter(GameRuntimePort):
         post_steps = list(options.get("post_ready_macro_steps", []))
         if not post_steps:
             return None
-        post_results = self._macro.execute(post_steps)
-        failed = [r for r in post_results if not r.ok]
-        if failed:
-            return {
-                "ok": False,
-                "retryable": True,
-                "detail": f"post_ready_macro_failed:{len(failed)}",
-                "macro_results": [r.__dict__ for r in post_results],
-            }
-        return None
+        result = self._driver.settle_after_enter_game(post_steps)
+        if bool(result.get("ok", False)):
+            return None
+        return result

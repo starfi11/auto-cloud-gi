@@ -19,17 +19,27 @@ class GenshinPCBetterGIProfile(AutomationProfilePort):
             "required_context": "genshin_window",
             "controller_id": "genshin_controller",
             "required_resources": ["mouse", "keyboard", "focus"],
+            "transition_settle_seconds": float(override.get("transition_settle_seconds", 0.8)),
+            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 45.0)),
+            "transition_require_observed": bool(override.get("transition_require_observed", False)),
+            "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
         }
         shared_btgi = {
             "required_context": "bettergi_panel",
             "controller_id": "bettergi_controller",
             "required_resources": ["mouse", "keyboard", "focus"],
+            "transition_settle_seconds": float(override.get("transition_settle_seconds", 0.8)),
+            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 45.0)),
+            "transition_require_observed": bool(override.get("transition_require_observed", False)),
+            "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
         }
 
         wait_params = {
             "scene": "in_world",
             "timeout_seconds": float(override.get("pc_wait_timeout_seconds", 180.0)),
             "ready_after_seconds": float(override.get("pc_wait_ready_after_seconds", 30.0)),
+            "ready_element_id": str(override.get("ready_element_id", "cloud_door_enter")).strip(),
+            "ready_element_profile": str(override.get("ready_element_profile", "genshin_cloud")),
             **shared_genshin,
         }
         if bool(override.get("use_text_signal_wait", False)):

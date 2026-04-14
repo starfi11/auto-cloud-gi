@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.adapters.action_specs import launch_macro_update_ignore, post_ready_macro
+from src.adapters.action_specs import kongyue_claim_macro, launch_macro_update_ignore, one_dragon_drive_macro
 from src.domain.run_request import RunRequest
 from src.domain.workflow import ActionIntent, StateNode, StatePlan, WorkflowPlan, WorkflowStep
 from src.ports.profile_port import AutomationProfilePort
@@ -19,33 +19,89 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
         assistant_log_root = str(override.get("assistant_log_root", "")).strip()
         assistant_log_glob = str(override.get("assistant_log_glob", "*.log")).strip() or "*.log"
 
-        wait_params = {"scene": "in_world", "timeout_seconds": 240.0, "ready_after_seconds": 60.0}
-        if scenario.startswith("debug_slow"):
-            wait_params = {"scene": "in_world", "timeout_seconds": 30.0, "ready_after_seconds": 10.0}
-        if bool(override.get("use_text_signal_wait", False)):
-            wait_params.update(
-                {
-                    "scene_ready_text_any": ["点击进入"],
-                    "scene_block_text_any": ["网络较差", "重新连接"],
-                    "text_signal_file": str(override.get("text_signal_file", "./runtime/vision/signals/latest.txt")),
-                    "text_poll_seconds": float(override.get("text_poll_seconds", 0.3)),
-                }
-            )
-
         shared_genshin = {
             "required_context": "genshin_window",
             "controller_id": "genshin_controller",
             "required_resources": ["mouse", "keyboard", "focus"],
+            "transition_settle_seconds": float(override.get("transition_settle_seconds", 0.8)),
+            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 45.0)),
+            "transition_require_observed": bool(override.get("transition_require_observed", False)),
+            "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
         }
         shared_btgi = {
             "required_context": "bettergi_panel",
             "controller_id": "bettergi_controller",
             "required_resources": ["mouse", "keyboard", "focus"],
+            "transition_settle_seconds": float(override.get("transition_settle_seconds", 0.8)),
+            "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 45.0)),
+            "transition_require_observed": bool(override.get("transition_require_observed", False)),
+            "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
         }
 
-        post_ready_macro_steps = post_ready_macro()
+        close_reward_steps = [
+            {
+                "op": "click_element",
+                "element_id": "cloud_claim_gift_close",
+                "element_profile": "genshin_cloud",
+                "timeout_seconds": 2.0,
+                "poll_seconds": 0.08,
+            }
+        ]
+        click_start_game_steps = [
+            {
+                "op": "click_element",
+                "element_id": "cloud_start_game_button",
+                "element_profile": "genshin_cloud",
+                "timeout_seconds": 2.0,
+                "poll_seconds": 0.08,
+            }
+        ]
+        queue_select_steps: list[dict[str, object]] = []
+        if queue_strategy == "quick":
+            queue_select_steps = [
+                {
+                    "op": "click_element",
+                    "element_id": "cloud_queue_quick_button",
+                    "element_profile": "genshin_cloud",
+                    "timeout_seconds": 2.0,
+                    "poll_seconds": 0.08,
+                }
+            ]
+        elif queue_strategy != "none":
+            queue_select_steps = [
+                {
+                    "op": "click_element",
+                    "element_id": "cloud_queue_normal_button",
+                    "element_profile": "genshin_cloud",
+                    "timeout_seconds": 2.0,
+                    "poll_seconds": 0.08,
+                }
+            ]
 
+        click_enter_game_steps = [
+            {
+                "op": "click_element",
+                "element_id": "cloud_door_enter",
+                "element_profile": "genshin_cloud",
+                "timeout_seconds": 3.0,
+                "poll_seconds": 0.1,
+                "clicks": 2,
+            }
+        ]
+        kongyue_steps = kongyue_claim_macro()
+
+        post_ready_macro_steps: list[dict[str, object]] = []
         launch_macro_steps = launch_macro_update_ignore()
+        drive_macro_steps = one_dragon_drive_macro()
+
+        wait_params = {
+            "scene": "in_world",
+            "timeout_seconds": float(override.get("game_ready_timeout_seconds", 240.0)),
+            "ready_after_seconds": float(override.get("game_ready_after_seconds", 60.0)),
+            "ready_element_id": str(override.get("ready_element_id", "cloud_door_enter")).strip(),
+            "ready_element_profile": str(override.get("ready_element_profile", "genshin_cloud")).strip() or "genshin_cloud",
+            **shared_genshin,
+        }
 
         drive_params = {
             "scenario": scenario,
@@ -54,21 +110,23 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
             "assistant_idle_seconds": float(override.get("assistant_idle_seconds", 45.0)),
             "assistant_timeout_seconds": float(override.get("assistant_timeout_seconds", 5400.0)),
             "assistant_require_log_activity": bool(override.get("assistant_require_log_activity", True)),
+            "drive_macro_steps": drive_macro_steps,
             **shared_btgi,
         }
 
         steps = [
             WorkflowStep(name="start_cloud_game", kind="game.launch", params={**shared_genshin}),
-            WorkflowStep(name="enter_queue", kind="game.queue.enter", params={"strategy": queue_strategy or "normal", **shared_genshin}),
+            WorkflowStep(name="close_reward_popup", kind="game.queue.enter", params={"queue_macro_steps": close_reward_steps, **shared_genshin}),
+            WorkflowStep(name="click_start_game", kind="game.queue.enter", params={"queue_macro_steps": click_start_game_steps, **shared_genshin}),
+            WorkflowStep(name="select_queue", kind="game.queue.enter", params={"queue_macro_steps": queue_select_steps, **shared_genshin}),
+            WorkflowStep(name="click_enter_game", kind="game.queue.enter", params={"queue_macro_steps": click_enter_game_steps, **shared_genshin}),
+            WorkflowStep(name="claim_kongyue", kind="game.kongyue.claim", params={"kongyue_macro_steps": kongyue_steps, **shared_genshin}),
+            WorkflowStep(name="wait_game_ready", kind="game.wait.scene", params={**wait_params, "post_ready_macro_steps": post_ready_macro_steps}),
+            WorkflowStep(name="start_companion", kind="assistant.launch", params={"assistant": "bettergi", **shared_btgi}),
             WorkflowStep(
-                name="wait_game_ready",
-                kind="game.wait.scene",
-                params={**wait_params, "post_ready_macro_steps": post_ready_macro_steps, **shared_genshin},
-            ),
-            WorkflowStep(
-                name="start_companion",
+                name="dismiss_btgi_update",
                 kind="assistant.launch",
-                params={"assistant": "bettergi", "launch_macro_steps": launch_macro_steps, **shared_btgi},
+                params={"assistant": "bettergi", "skip_start_process": True, "launch_macro_steps": launch_macro_steps, **shared_btgi},
             ),
             WorkflowStep(name="drive_companion", kind="assistant.drive", params=drive_params),
             WorkflowStep(name="collect_artifacts", kind="system.collect", params={**shared_btgi}),
@@ -77,7 +135,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
         state_plan = StatePlan(
             initial_state="S_BOOTSTRAP",
             terminal_states=["S_DONE"],
-            max_ticks=120,
+            max_ticks=int(override.get("state_max_ticks", 300)),
             nodes=[
                 StateNode(
                     state="S_BOOTSTRAP",
@@ -90,49 +148,199 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     ),
                     controller_id="genshin_controller",
                     context_id="genshin_window",
-                    next_state="S_QUEUE_ENTRY",
+                    next_state="S_DISCOVER_CLOUD",
+                    stable_ticks=1,
                 ),
                 StateNode(
-                    state="S_QUEUE_ENTRY",
+                    state="S_DISCOVER_CLOUD",
+                    controller_id="genshin_controller",
+                    context_id="genshin_window",
+                    wait_seconds=0.12,
+                    stable_ticks=1,
+                ),
+                StateNode(
+                    state="S_DAILY_REWARD_POPUP",
                     action=ActionIntent(
-                        name="enter_queue",
+                        name="close_reward_popup",
                         kind="game.queue.enter",
-                        params={"strategy": queue_strategy or "normal", **shared_genshin},
+                        params={"queue_macro_steps": close_reward_steps, **shared_genshin},
                         controller_id="genshin_controller",
                         required_context="genshin_window",
                     ),
                     controller_id="genshin_controller",
                     context_id="genshin_window",
-                    next_state="S_WAIT_GAME_READY",
+                    next_state="S_DISCOVER_CLOUD",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "genshin_cloud",
+                        "expr": {
+                            "op": "kof",
+                            "k": 2,
+                            "items": [
+                                {"present": "cloud_daily_reward_keyword"},
+                                {"present": "cloud_free_time_keyword"},
+                                {"present": "cloud_click_blank_close_keyword"},
+                            ],
+                        },
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
                 ),
                 StateNode(
-                    state="S_WAIT_GAME_READY",
+                    state="S_CLOUD_HOME",
                     action=ActionIntent(
-                        name="wait_game_ready",
-                        kind="game.wait.scene",
-                        params={**wait_params, "post_ready_macro_steps": post_ready_macro_steps, **shared_genshin},
+                        name="click_start_game",
+                        kind="game.queue.enter",
+                        params={"queue_macro_steps": click_start_game_steps, **shared_genshin},
                         controller_id="genshin_controller",
                         required_context="genshin_window",
                     ),
                     controller_id="genshin_controller",
                     context_id="genshin_window",
-                    next_state="S_START_ASSISTANT",
+                    next_state="S_DISCOVER_CLOUD",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "genshin_cloud",
+                        "expr": {"present": "cloud_start_game_button"},
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
                 ),
                 StateNode(
-                    state="S_START_ASSISTANT",
+                    state="S_QUEUEING",
+                    controller_id="genshin_controller",
+                    context_id="genshin_window",
+                    wait_seconds=0.2,
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "genshin_cloud",
+                        "expr": {
+                            "op": "all",
+                            "items": [
+                                {"present": "cloud_queue_exit_text"},
+                                {"present": "cloud_queue_eta_text"},
+                            ],
+                        },
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
+                ),
+                StateNode(
+                    state="S_ENTER_PROMPT",
+                    action=ActionIntent(
+                        name="click_enter_game",
+                        kind="game.queue.enter",
+                        params={"queue_macro_steps": click_enter_game_steps, **shared_genshin},
+                        controller_id="genshin_controller",
+                        required_context="genshin_window",
+                    ),
+                    controller_id="genshin_controller",
+                    context_id="genshin_window",
+                    next_state="S_DISCOVER_CLOUD",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "genshin_cloud",
+                        "expr": {
+                            "op": "all",
+                            "items": [
+                                {"absent": "cloud_queue_exit_text"},
+                                {"absent": "cloud_queue_eta_text"},
+                                {"present": "cloud_door_enter"},
+                            ],
+                        },
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
+                ),
+                StateNode(
+                    state="S_KONGYUE",
+                    action=ActionIntent(
+                        name="claim_kongyue",
+                        kind="game.kongyue.claim",
+                        params={"kongyue_macro_steps": kongyue_steps, **shared_genshin},
+                        controller_id="genshin_controller",
+                        required_context="genshin_window",
+                    ),
+                    controller_id="genshin_controller",
+                    context_id="genshin_window",
+                    next_state="S_DISCOVER_CLOUD",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "genshin_cloud",
+                        "expr": {"present": "cloud_kongyue_reward_text"},
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
+                ),
+                StateNode(
+                    state="S_IN_GAME",
                     action=ActionIntent(
                         name="start_companion",
                         kind="assistant.launch",
-                        params={"assistant": "bettergi", "launch_macro_steps": launch_macro_steps, **shared_btgi},
+                        params={"assistant": "bettergi", **shared_btgi},
                         controller_id="bettergi_controller",
                         required_context="bettergi_panel",
                     ),
                     controller_id="bettergi_controller",
                     context_id="bettergi_panel",
-                    next_state="S_DRIVE_ASSISTANT",
+                    next_state="S_BTGI_DISCOVER",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "genshin_cloud",
+                        "expr": {
+                            "op": "kof",
+                            "k": 2,
+                            "items": [
+                                {"present": "cloud_in_game_num_1"},
+                                {"present": "cloud_in_game_num_2"},
+                                {"present": "cloud_in_game_num_3"},
+                                {"present": "cloud_in_game_num_4"},
+                            ],
+                        },
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
                 ),
                 StateNode(
-                    state="S_DRIVE_ASSISTANT",
+                    state="S_BTGI_DISCOVER",
+                    controller_id="bettergi_controller",
+                    context_id="bettergi_panel",
+                    wait_seconds=0.15,
+                    stable_ticks=1,
+                ),
+                StateNode(
+                    state="S_BTGI_CHECK_UPDATE",
+                    action=ActionIntent(
+                        name="dismiss_btgi_update",
+                        kind="assistant.launch",
+                        params={
+                            "assistant": "bettergi",
+                            "skip_start_process": True,
+                            "launch_macro_steps": launch_macro_steps,
+                            **shared_btgi,
+                        },
+                        controller_id="bettergi_controller",
+                        required_context="bettergi_panel",
+                    ),
+                    controller_id="bettergi_controller",
+                    context_id="bettergi_panel",
+                    next_state="S_BTGI_DISCOVER",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "bettergi",
+                        "expr": {
+                            "op": "any",
+                            "items": [
+                                {"present": "btgi_update_popup"},
+                                {"present": "btgi_update_ignore_button"},
+                            ],
+                        },
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
+                ),
+                StateNode(
+                    state="S_BTGI_HOME",
                     action=ActionIntent(
                         name="drive_companion",
                         kind="assistant.drive",
@@ -142,20 +350,14 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     ),
                     controller_id="bettergi_controller",
                     context_id="bettergi_panel",
-                    next_state="S_COLLECT",
-                ),
-                StateNode(
-                    state="S_COLLECT",
-                    action=ActionIntent(
-                        name="collect_artifacts",
-                        kind="system.collect",
-                        params={**shared_btgi},
-                        controller_id="bettergi_controller",
-                        required_context="bettergi_panel",
-                    ),
-                    controller_id="bettergi_controller",
-                    context_id="bettergi_panel",
                     next_state="S_DONE",
+                    stable_ticks=2,
+                    recognition={
+                        "profile": "bettergi",
+                        "expr": {"present": "btgi_home"},
+                        "timeout_seconds": 0.03,
+                        "poll_seconds": 0.01,
+                    },
                 ),
             ],
         )

@@ -1,0 +1,269 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import os
+from typing import Any
+
+from src.adapters.perception import ElementResolver
+from src.adapters.runtime.ui_macro import build_ui_backend
+from src.domain.perception import PerceptionCandidate, PerceptionResult
+from src.domain.state_kernel import StateEstimate
+from src.domain.workflow import StateNode, WorkflowPlan
+from src.kernel.context_store import RunContext
+from src.ports.state_estimator_port import StateEstimatorPort
+
+
+@dataclass
+class _NodeEval:
+    state: str
+    confidence: float
+    matched: int
+    total: int
+    evidence_refs: list[str]
+    detail: str
+
+
+@dataclass
+class _CondEval:
+    ok: bool
+    score: float
+    matched: int
+    total: int
+    evidence_refs: list[str]
+    detail: str
+
+
+class SpecStateEstimator(StateEstimatorPort):
+    """State recognizer based on declarative node.recognition.
+
+    Supports both legacy and expression modes.
+
+    legacy schema:
+      {
+        "profile": "genshin_cloud",
+        "all": ["element_a", "element_b"],
+        "any": ["element_x", "element_y"],
+        "min_any": 1
+      }
+
+    expression schema:
+      {
+        "profile": "genshin_cloud",
+        "expr": {
+          "op": "all|any|kof|not",
+          "items": [ ... ],
+          "k": 2
+        }
+      }
+
+    leaf schema:
+      {"present": "element_id"}
+      {"absent": "element_id"}
+      {"type": "element_present", "id": "..."}
+      {"type": "element_absent", "id": "..."}
+    """
+
+    def __init__(self) -> None:
+        backend_mode = os.getenv("UI_AUTOMATION_BACKEND", "auto")
+        self._resolver = ElementResolver(build_ui_backend(backend_mode))
+
+    def estimate(self, context: RunContext, plan: WorkflowPlan) -> StateEstimate:
+        sp = plan.state_plan
+        if sp is None:
+            return StateEstimate(
+                state=context.state or "BOOTSTRAP",
+                confidence=1.0,
+                signals={"source": "context"},
+                uncertainty_reason="",
+            )
+
+        evals: list[_NodeEval] = []
+        candidates: list[PerceptionCandidate] = []
+        all_evidence: list[str] = []
+        has_any_recognition = False
+
+        for node in sp.nodes:
+            if node.recognition:
+                has_any_recognition = True
+            ev = self._evaluate_node(node)
+            evals.append(ev)
+            candidates.append(
+                PerceptionCandidate(
+                    label=node.state,
+                    confidence=ev.confidence,
+                    kind="state",
+                    meta={"matched": ev.matched, "total": ev.total, "detail": ev.detail},
+                )
+            )
+            all_evidence.extend(ev.evidence_refs)
+
+        if not evals or not has_any_recognition:
+            return StateEstimate(
+                state=context.state or sp.initial_state,
+                confidence=1.0,
+                signals={"source": "context_fallback"},
+                uncertainty_reason="",
+            )
+
+        best = max(evals, key=lambda e: e.confidence)
+        if best.confidence <= 0.01:
+            return StateEstimate(
+                state=context.state or sp.initial_state,
+                confidence=0.3,
+                signals={"source": "fallback_context", "current": context.state},
+                perception=PerceptionResult(
+                    ok=False,
+                    scene_id="state_recognition",
+                    candidates=candidates,
+                    evidence_refs=all_evidence[:40],
+                    uncertainty_reason="no_node_confident_match",
+                ),
+                uncertainty_reason="no_node_confident_match",
+            )
+
+        return StateEstimate(
+            state=best.state,
+            confidence=best.confidence,
+            signals={"source": "spec_recognizer", "best_state": best.state},
+            perception=PerceptionResult(
+                ok=True,
+                scene_id="state_recognition",
+                candidates=candidates,
+                evidence_refs=all_evidence[:40],
+                uncertainty_reason="",
+            ),
+            uncertainty_reason="",
+        )
+
+    def _evaluate_node(self, node: StateNode) -> _NodeEval:
+        rec = node.recognition or {}
+        if not rec:
+            return _NodeEval(node.state, 0.0, 0, 0, [], "no_recognition")
+
+        profile = str(rec.get("profile", "default")).strip() or "default"
+        timeout_seconds = float(rec.get("timeout_seconds", 0.03))
+        poll_seconds = float(rec.get("poll_seconds", 0.01))
+
+        expr = rec.get("expr")
+        if isinstance(expr, dict):
+            out = self._eval_expr(expr, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            return _NodeEval(
+                state=node.state,
+                confidence=max(0.0, min(1.0, out.score)),
+                matched=out.matched,
+                total=out.total,
+                evidence_refs=out.evidence_refs,
+                detail=out.detail,
+            )
+
+        # Legacy compatibility path
+        all_ids = [str(x) for x in rec.get("all", []) if str(x).strip()]
+        any_ids = [str(x) for x in rec.get("any", []) if str(x).strip()]
+        min_any = int(rec.get("min_any", 1)) if any_ids else 0
+        if not all_ids and not any_ids:
+            return _NodeEval(node.state, 0.0, 0, 0, [], "empty_legacy")
+
+        matched_all = 0
+        matched_any = 0
+        evidence_refs: list[str] = []
+        for eid in all_ids:
+            r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            if r.ok:
+                matched_all += 1
+                evidence_refs.extend(r.evidence_refs)
+        for eid in any_ids:
+            r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            if r.ok:
+                matched_any += 1
+                evidence_refs.extend(r.evidence_refs)
+
+        all_score = 1.0 if not all_ids else (matched_all / max(1, len(all_ids)))
+        any_score = 1.0 if not any_ids else (matched_any / max(1, len(any_ids)))
+        gated_any = 1.0 if matched_any >= min_any else any_score * 0.5
+        confidence = 0.55 * all_score + 0.45 * gated_any
+        matched = matched_all + matched_any
+        total = len(all_ids) + len(any_ids)
+        return _NodeEval(node.state, max(0.0, min(1.0, confidence)), matched, total, evidence_refs, "legacy")
+
+    def _eval_expr(
+        self,
+        expr: dict[str, Any],
+        *,
+        profile: str,
+        timeout_seconds: float,
+        poll_seconds: float,
+    ) -> _CondEval:
+        op = str(expr.get("op", "")).strip().lower()
+        if op in {"all", "any", "kof"}:
+            raw_items = expr.get("items", [])
+            items = [i for i in raw_items if isinstance(i, dict)] if isinstance(raw_items, list) else []
+            if not items:
+                return _CondEval(False, 0.0, 0, 0, [], f"{op}_empty")
+            evals = [
+                self._eval_clause(i, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                for i in items
+            ]
+            matched = sum(1 for e in evals if e.ok)
+            total = len(evals)
+            evidence = [x for e in evals for x in e.evidence_refs]
+            if op == "all":
+                ok = matched == total
+                score = matched / max(1, total)
+                return _CondEval(ok, score, matched, total, evidence, f"all:{matched}/{total}")
+            if op == "any":
+                ok = matched >= 1
+                score = matched / max(1, total)
+                return _CondEval(ok, score, matched, total, evidence, f"any:{matched}/{total}")
+            k = int(expr.get("k", 1))
+            ok = matched >= k
+            score = matched / max(1, total)
+            return _CondEval(ok, score, matched, total, evidence, f"kof:{matched}/{total},k={k}")
+
+        if op == "not":
+            item = expr.get("item")
+            if not isinstance(item, dict):
+                return _CondEval(False, 0.0, 0, 1, [], "not_missing_item")
+            inner = self._eval_clause(item, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            return _CondEval(not inner.ok, 1.0 if not inner.ok else 0.0, 1 if not inner.ok else 0, 1, inner.evidence_refs, "not")
+
+        return self._eval_clause(expr, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+
+    def _eval_clause(
+        self,
+        clause: dict[str, Any],
+        *,
+        profile: str,
+        timeout_seconds: float,
+        poll_seconds: float,
+    ) -> _CondEval:
+        # nested expression
+        if "op" in clause:
+            return self._eval_expr(clause, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+
+        present = str(clause.get("present", "")).strip()
+        absent = str(clause.get("absent", "")).strip()
+        ctype = str(clause.get("type", "")).strip().lower()
+        cid = str(clause.get("id", "")).strip()
+
+        if ctype == "element_present" and cid:
+            present = cid
+        if ctype == "element_absent" and cid:
+            absent = cid
+
+        if present:
+            r = self._match_present(present, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            return _CondEval(r.ok, 1.0 if r.ok else 0.0, 1 if r.ok else 0, 1, r.evidence_refs, f"present:{present}")
+        if absent:
+            r = self._match_present(absent, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            ok = not r.ok
+            return _CondEval(ok, 1.0 if ok else 0.0, 1 if ok else 0, 1, r.evidence_refs, f"absent:{absent}")
+
+        return _CondEval(False, 0.0, 0, 1, [], "unknown_clause")
+
+    def _match_present(self, element_id: str, *, profile: str, timeout_seconds: float, poll_seconds: float):
+        return self._resolver.resolve(
+            element_id=element_id,
+            profile=profile,
+            timeout_seconds=timeout_seconds,
+            poll_seconds=poll_seconds,
+        )

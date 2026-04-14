@@ -9,10 +9,10 @@ import uuid
 
 from src.adapters.local_command_adapter import LocalFileCommandAdapter
 from src.adapters.controllers import ActionDispatcherController, ControllerRouter
-from src.adapters.policy import TablePolicyEngine
-from src.adapters.profiles import GenshinCloudBetterGIProfile, GenshinPCBetterGIProfile
+from src.adapters.policy import TransitionPolicyEngine
+from src.adapters.profiles import GenshinCloudBetterGIProfile
 from src.adapters.recovery import NoopAiRecoveryPlanner, TableRecoveryStrategy
-from src.adapters.state import ContextStateEstimator
+from src.adapters.state import SpecStateEstimator
 from src.adapters.stdout_notify_adapter import StdoutNotifyAdapter
 from src.app.action_dispatcher import ActionDispatcher
 from src.app.profile_registry import ProfileRegistry
@@ -73,7 +73,6 @@ class Orchestrator(TriggerPort):
         self._profiles = ProfileRegistry(
             _profiles={
                 "genshin_cloud_bettergi": GenshinCloudBetterGIProfile(),
-                "genshin_pc_bettergi": GenshinPCBetterGIProfile(),
             },
             _default_profile=default_profile,
         )
@@ -107,8 +106,8 @@ class Orchestrator(TriggerPort):
             runtime=controller_router,
             interrupt_check=self._is_interrupted,
             risk_check=self._is_risk_stopped,
-            state_estimator=ContextStateEstimator(),
-            policy_engine=TablePolicyEngine(),
+            state_estimator=SpecStateEstimator(),
+            policy_engine=TransitionPolicyEngine(),
             context_manager=self._context_manager,
             recovery_strategy=TableRecoveryStrategy(),
             resource_arbiter=ResourceArbiter(),
@@ -132,7 +131,7 @@ class Orchestrator(TriggerPort):
                 "command_source_file": command_source_file,
                 "concurrency_mode": concurrency_mode,
                 "default_profile": default_profile,
-                "profiles": ["genshin_cloud_bettergi", "genshin_pc_bettergi"],
+                "profiles": ["genshin_cloud_bettergi"],
             },
         )
 

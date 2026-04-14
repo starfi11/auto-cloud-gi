@@ -5,6 +5,7 @@ import subprocess
 from typing import Any
 
 from src.adapters.action_specs import one_dragon_drive_macro
+from src.adapters.drivers import BetterGiDriver
 from src.adapters.runtime.log_watch import LogActivityWatcher, LogWatchSpec
 from src.adapters.runtime.process_registry import ProcessRegistry
 from src.adapters.runtime.ui_macro import UiMacroExecutor, build_ui_backend
@@ -22,6 +23,7 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
     def __init__(self) -> None:
         backend_mode = os.getenv("UI_AUTOMATION_BACKEND", "auto")
         self._macro = UiMacroExecutor(build_ui_backend(backend_mode))
+        self._driver = BetterGiDriver(self._macro)
         self._watcher = LogActivityWatcher()
         self._processes = ProcessRegistry()
         self._strict = _env_bool("PY_RUNTIME_STRICT", default=False)
@@ -29,9 +31,12 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
     def launch(self, options: dict[str, Any]) -> dict[str, Any]:
         exe = str(options.get("assistant_exe") or os.getenv("BETTERGI_EXE", "")).strip()
         steps = list(options.get("launch_macro_steps", []))
+        skip_start = bool(options.get("skip_start_process", False))
 
         evidence_refs: list[str] = []
-        if exe:
+        if skip_start:
+            pass
+        elif exe:
             try:
                 proc = subprocess.Popen([exe], shell=False)
                 mp = self._processes.register("assistant", proc)
@@ -52,15 +57,15 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
             }
 
         if steps:
-            results = self._macro.execute(steps)
-            failed = [r for r in results if not r.ok]
-            evidence_refs.extend([f"macro:{r.detail}" for r in results[:3]])
-            if failed:
+            r = self._driver.dismiss_update_if_present(steps)
+            mr = list(r.get("macro_results", []))
+            evidence_refs.extend([f"macro:{x.get('detail', '')}" for x in mr[:3] if isinstance(x, dict)])
+            if not bool(r.get("ok", False)):
                 return {
                     "ok": False,
                     "retryable": True,
-                    "detail": f"assistant_launch_macro_failed:{len(failed)}",
-                    "macro_results": [r.__dict__ for r in results],
+                    "detail": str(r.get("detail", "assistant_launch_macro_failed")),
+                    "macro_results": mr,
                     "evidence_refs": evidence_refs,
                 }
 
@@ -74,17 +79,13 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
 
     def drive(self, scenario: str, options: dict[str, Any]) -> dict[str, Any]:
         steps = list(options.get("drive_macro_steps", []))
-        if not steps:
-            steps = self._default_btgi_drive_macro()
-
-        results = self._macro.execute(steps)
-        failed = [r for r in results if not r.ok]
-        if failed:
+        r = self._driver.configure_and_start_one_dragon(steps=(steps or None))
+        if not bool(r.get("ok", False)):
             return {
                 "ok": False,
                 "retryable": True,
-                "detail": f"assistant_drive_macro_failed:{len(failed)}",
-                "macro_results": [r.__dict__ for r in results],
+                "detail": str(r.get("detail", "assistant_drive_macro_failed")),
+                "macro_results": list(r.get("macro_results", [])),
                 "scenario": scenario,
             }
 

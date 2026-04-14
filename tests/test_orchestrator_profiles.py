@@ -4,11 +4,12 @@ from tempfile import TemporaryDirectory
 
 from src.adapters.runtime import NoopAssistantRuntimeAdapter, NoopGameRuntimeAdapter
 from src.app.orchestrator import Orchestrator
+from src.app.profile_registry import UnknownProfileError
 from src.domain.run_request import RunRequest
 
 
 class OrchestratorProfilesTest(unittest.TestCase):
-    def test_accepts_pc_profile(self) -> None:
+    def test_rejects_unregistered_profile(self) -> None:
         with TemporaryDirectory() as td:
             tmp = Path(td)
             runtime_dir = tmp / "runtime"
@@ -20,16 +21,15 @@ class OrchestratorProfilesTest(unittest.TestCase):
                 game_runtime=NoopGameRuntimeAdapter(),
                 assistant_runtime=NoopAssistantRuntimeAdapter(),
             )
-            r = orch.start_run(
-                RunRequest(
-                    trigger="API_TRIGGER",
-                    idempotency_key="pc-1",
-                    target_profile="genshin_pc_bettergi",
-                    scenario="daily_default",
+            with self.assertRaises(UnknownProfileError):
+                orch.start_run(
+                    RunRequest(
+                        trigger="API_TRIGGER",
+                        idempotency_key="pc-1",
+                        target_profile="genshin_pc_bettergi",
+                        scenario="daily_default",
+                    )
                 )
-            )
-            self.assertTrue(r.accepted)
-            orch.wait_run(r.run_id, timeout_seconds=1)
 
 
 if __name__ == "__main__":

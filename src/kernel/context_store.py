@@ -19,6 +19,7 @@ class RunContext:
     artifacts: list[str] = field(default_factory=list)
     layered_state: LayeredRuntimeState = field(default_factory=LayeredRuntimeState)
     last_error: dict[str, Any] = field(default_factory=dict)
+    pending_transition: dict[str, Any] = field(default_factory=dict)
 
 
 class ContextStore:
