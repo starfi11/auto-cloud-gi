@@ -11,6 +11,10 @@ def _bool_env(name: str, default: bool = False) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _raw_bool_env(name: str, default: bool = False) -> str:
+    return "1" if _bool_env(name, default=default) else "0"
+
+
 def _normalize_paddle_lang(ocr_lang: str) -> str:
     # PaddleOCR language keys are coarse-grained. "ch" covers Chinese + English.
     v = (ocr_lang or "").strip().lower()
@@ -33,7 +37,13 @@ class NullOcrEngine(OcrEnginePort):
 class PaddleOcrEngine(OcrEnginePort):
     def __init__(self, lang: str) -> None:
         # Keep runtime conservative on Windows CPU to avoid PIR-related kernel issues.
-        os.environ["FLAGS_enable_pir_api"] = "0"
+        # Backward-compatible key: prefer PADDLE_FLAGS_ENABLE_PIR_API, fallback to FLAGS_enable_pir_api.
+        pir_flag_raw = os.getenv("PADDLE_FLAGS_ENABLE_PIR_API", os.getenv("FLAGS_enable_pir_api", "0"))
+        pir_enabled = pir_flag_raw.strip().lower() in {"1", "true", "yes", "on"}
+        os.environ["FLAGS_enable_pir_api"] = "1" if pir_enabled else "0"
+        # PaddleOCR 3.3+ uses DISABLE_MODEL_SOURCE_CHECK message key, keep old key for compatibility.
+        if "DISABLE_MODEL_SOURCE_CHECK" not in os.environ and "PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK" in os.environ:
+            os.environ["DISABLE_MODEL_SOURCE_CHECK"] = _raw_bool_env("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", default=True)
         from paddleocr import PaddleOCR  # type: ignore
 
         self.last_text = ""
@@ -51,19 +61,25 @@ class PaddleOcrEngine(OcrEnginePort):
             use_textline_orientation=use_textline_orientation,
         )
         runtime_flag = ""
+        runtime_flag_set = ""
         try:
             import paddle  # type: ignore
 
+            paddle.set_flags({"FLAGS_enable_pir_api": pir_enabled})
             runtime_flag = str(paddle.get_flags(["FLAGS_enable_pir_api"]).get("FLAGS_enable_pir_api"))
+            runtime_flag_set = "ok"
         except Exception:
             runtime_flag = "<unavailable>"
+            runtime_flag_set = "failed"
         print(
             "[ocr] paddle init "
             f"lang={paddle_lang} ocr_version={ocr_version} "
             f"doc_ori={use_doc_orientation_classify} doc_unwarp={use_doc_unwarping} "
             f"textline_ori={use_textline_orientation} "
+            f"PADDLE_FLAGS_ENABLE_PIR_API={os.getenv('PADDLE_FLAGS_ENABLE_PIR_API','')} "
             f"FLAGS_enable_pir_api_env={os.getenv('FLAGS_enable_pir_api','')} "
-            f"FLAGS_enable_pir_api_runtime={runtime_flag}",
+            f"FLAGS_enable_pir_api_runtime={runtime_flag} "
+            f"set_flags={runtime_flag_set}",
             flush=True,
         )
 

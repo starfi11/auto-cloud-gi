@@ -5,7 +5,12 @@ from pathlib import Path
 import os
 
 
-def _load_dotenv(dotenv_path: Path) -> None:
+def _bool_env(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "true" if default else "false").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _load_dotenv(dotenv_path: Path, override: bool) -> None:
     if not dotenv_path.exists():
         return
     for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
@@ -17,7 +22,10 @@ def _load_dotenv(dotenv_path: Path) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        os.environ[key] = value
+        if override:
+            os.environ[key] = value
+        else:
+            os.environ.setdefault(key, value)
 
 
 @dataclass(frozen=True)
@@ -38,7 +46,8 @@ class Settings:
 
     @staticmethod
     def from_env() -> "Settings":
-        _load_dotenv(Path(".env"))
+        dotenv_override = _bool_env("DOTENV_OVERRIDE", default=True)
+        _load_dotenv(Path(".env"), override=dotenv_override)
         return Settings(
             app_env=os.getenv("APP_ENV", "dev"),
             control_api_host=os.getenv("CONTROL_API_HOST", "0.0.0.0"),
