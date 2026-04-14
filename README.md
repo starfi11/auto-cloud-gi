@@ -54,12 +54,13 @@ python scripts/check_runtime_deps.py
 
 默认 OCR 引擎为 `PaddleOCR`（`OCR_ENGINE=paddle`）。
 
-若切换到 `tesseract`，请安装 Tesseract OCR，并在 `.env` 配置：
+推荐在 `.env` 设置：
 
 ```env
-OCR_ENGINE=tesseract
-TESSERACT_CMD=C:\Program Files\Tesseract-OCR\tesseract.exe
+OCR_ENGINE=paddle
+OCR_ENGINE_STRICT=true
 OCR_LANG=chi_sim+eng
+PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
 ```
 
 ## 配置说明
@@ -160,4 +161,4 @@ curl -X POST http://127.0.0.1:8788/api/v1/runs \
 - `VISION_ELEMENT_SPEC`
 - `VISION_TEMPLATE_ROOT`
 
-OCR 引擎默认使用 `PaddleOCR`，可通过 `OCR_ENGINE` 切换为 `tesseract` 或 `none`。
+OCR 引擎默认使用 `PaddleOCR`，可通过 `OCR_ENGINE=none` 临时关闭 OCR（仅调试用途）。

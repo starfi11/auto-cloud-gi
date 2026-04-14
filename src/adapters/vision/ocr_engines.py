@@ -30,26 +30,6 @@ class NullOcrEngine(OcrEnginePort):
         return ""
 
 
-class TesseractOcrEngine(OcrEnginePort):
-    def __init__(self, lang: str) -> None:
-        self.lang = lang
-        self.last_text = ""
-        self._cmd = os.getenv("TESSERACT_CMD", "").strip()
-
-    def read_text(self, image: Any) -> str:
-        try:
-            import pytesseract  # type: ignore
-
-            if self._cmd:
-                pytesseract.pytesseract.tesseract_cmd = self._cmd
-            text = str(pytesseract.image_to_string(image, lang=self.lang))
-            self.last_text = text
-            return text
-        except Exception as exc:  # noqa: BLE001
-            self.last_text = f"<ocr_error:{type(exc).__name__}:{exc}>"
-            return ""
-
-
 class PaddleOcrEngine(OcrEnginePort):
     def __init__(self, lang: str) -> None:
         from paddleocr import PaddleOCR  # type: ignore
@@ -99,17 +79,15 @@ def build_ocr_engine() -> OcrEnginePort:
     if engine == "none":
         return NullOcrEngine()
 
-    if engine == "tesseract":
-        return TesseractOcrEngine(lang)
-
     if engine == "paddle":
         try:
             return PaddleOcrEngine(lang)
-        except Exception:
+        except Exception as exc:
             if strict:
                 raise
-            return TesseractOcrEngine(lang)
+            print(f"[ocr] WARN paddle_init_failed, fallback_to_null: {type(exc).__name__}: {exc}", flush=True)
+            return NullOcrEngine()
 
-    # Unknown engine: keep runtime alive with a permissive fallback.
-    return TesseractOcrEngine(lang)
-
+    if strict:
+        raise ValueError(f"unsupported_ocr_engine:{engine}")
+    return NullOcrEngine()

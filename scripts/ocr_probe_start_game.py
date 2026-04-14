@@ -66,11 +66,12 @@ def main() -> int:
         or "./runtime/vision/templates",
     )
     parser.add_argument("--backend", default=os.getenv("UI_AUTOMATION_BACKEND", "auto"))
-    parser.add_argument("--ocr-engine", default=os.getenv("OCR_ENGINE", "paddle"), choices=["paddle", "tesseract", "none"])
+    parser.add_argument("--ocr-engine", default=os.getenv("OCR_ENGINE", "paddle"), choices=["paddle", "none"])
     parser.add_argument("--ocr-lang", default=os.getenv("OCR_LANG", "eng+chi_sim"))
     args = parser.parse_args()
     os.environ["OCR_ENGINE"] = args.ocr_engine
     os.environ["OCR_LANG"] = args.ocr_lang
+    os.environ["OCR_ENGINE_STRICT"] = "true"
 
     backend = build_ui_backend(args.backend)
     screen = backend.size()
@@ -87,6 +88,7 @@ def main() -> int:
     )
 
     ocr = build_ocr_engine()
+    print(f"[probe] resolved_ocr_impl={ocr.__class__.__name__} strict={os.getenv('OCR_ENGINE_STRICT')}")
     resolver = ElementResolver(
         backend,
         registry=registry,
