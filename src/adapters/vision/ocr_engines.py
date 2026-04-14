@@ -32,12 +32,31 @@ class NullOcrEngine(OcrEnginePort):
 
 class PaddleOcrEngine(OcrEnginePort):
     def __init__(self, lang: str) -> None:
+        # Keep runtime conservative on Windows CPU to avoid PIR-related kernel issues.
+        os.environ.setdefault("FLAGS_enable_pir_api", os.getenv("PADDLE_FLAGS_ENABLE_PIR_API", "0"))
         from paddleocr import PaddleOCR  # type: ignore
 
         self.last_text = ""
         paddle_lang = _normalize_paddle_lang(lang)
+        ocr_version = os.getenv("PADDLE_OCR_VERSION", "PP-OCRv5_mobile").strip() or "PP-OCRv5_mobile"
+        use_doc_orientation_classify = _bool_env("PADDLE_OCR_USE_DOC_ORIENTATION", default=False)
+        use_doc_unwarping = _bool_env("PADDLE_OCR_USE_DOC_UNWARPING", default=False)
+        use_textline_orientation = _bool_env("PADDLE_OCR_USE_TEXTLINE_ORI", default=False)
         # Fixed runtime contract: PaddleOCR 3.x style init.
-        self._ocr = PaddleOCR(lang=paddle_lang)
+        self._ocr = PaddleOCR(
+            lang=paddle_lang,
+            ocr_version=ocr_version,
+            use_doc_orientation_classify=use_doc_orientation_classify,
+            use_doc_unwarping=use_doc_unwarping,
+            use_textline_orientation=use_textline_orientation,
+        )
+        print(
+            "[ocr] paddle init "
+            f"lang={paddle_lang} ocr_version={ocr_version} "
+            f"doc_ori={use_doc_orientation_classify} doc_unwarp={use_doc_unwarping} "
+            f"textline_ori={use_textline_orientation} FLAGS_enable_pir_api={os.getenv('FLAGS_enable_pir_api','')}",
+            flush=True,
+        )
 
     def read_text(self, image: Any) -> str:
         try:
