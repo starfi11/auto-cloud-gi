@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import json
 import threading
+import traceback
 import uuid
 
 from src.adapters.local_command_adapter import LocalFileCommandAdapter
@@ -256,9 +257,19 @@ class Orchestrator(TriggerPort):
             rec = self._records.get(run_id)
             if rec is not None:
                 rec.status = "failed"
-                rec.reason = str(exc)
+                rec.reason = str(exc) or f"{type(exc).__name__}"
                 rec.finished_at = self._utc_now()
-            self._logs.run_event(run_id, "run_execution_failed", {"error": str(exc)}, level="ERROR")
+            self._logs.run_event(
+                run_id,
+                "run_execution_failed",
+                {
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "error_repr": repr(exc),
+                    "traceback": traceback.format_exc(),
+                },
+                level="ERROR",
+            )
             self._logs.write_run_summary(
                 run_id,
                 {
@@ -267,7 +278,7 @@ class Orchestrator(TriggerPort):
                     "trigger": context.manifest.get("trigger", ""),
                     "target_profile": context.manifest.get("target_profile", ""),
                     "scenario": context.manifest.get("scenario", ""),
-                    "reason": str(exc),
+                    "reason": str(exc) or f"{type(exc).__name__}",
                 },
             )
             self._logs.write_run_diagnostics(
@@ -278,12 +289,20 @@ class Orchestrator(TriggerPort):
                     "state": context.state,
                     "context_id": context.active_context_id,
                     "controller_id": context.layered_state.controller_layer.active_controller_id,
-                    "reason": str(exc),
+                    "reason": str(exc) or f"{type(exc).__name__}",
+                    "error_type": type(exc).__name__,
+                    "error_repr": repr(exc),
+                    "traceback": traceback.format_exc(),
                     "last_error": context.last_error,
                 },
             )
             self._event_bus.publish(
-                Event(type="RUN.FAILED", source="executor", run_id=run_id, payload={"error": str(exc)})
+                Event(
+                    type="RUN.FAILED",
+                    source="executor",
+                    run_id=run_id,
+                    payload={"error": str(exc), "error_type": type(exc).__name__},
+                )
             )
             self._event_bus.dispatch_once()
         finally:

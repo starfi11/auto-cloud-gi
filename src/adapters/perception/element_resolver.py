@@ -164,12 +164,19 @@ class ElementResolver(ElementResolverPort):
         except Exception:
             return ElementMatchResult(ok=False, element_id=element.element_id, detail=f"template_not_found:{key}")
 
-        box = self._backend.locate_template(
-            tr.path,
-            confidence=float(matcher.confidence),
-            grayscale=bool(matcher.grayscale),
-            region=region,
-        )
+        try:
+            box = self._backend.locate_template(
+                tr.path,
+                confidence=float(matcher.confidence),
+                grayscale=bool(matcher.grayscale),
+                region=region,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return ElementMatchResult(
+                ok=False,
+                element_id=element.element_id,
+                detail=f"template_error:{type(exc).__name__}:{exc}",
+            )
         if box is None:
             return ElementMatchResult(ok=False, element_id=element.element_id, detail="template_miss")
         return ElementMatchResult(
@@ -190,8 +197,15 @@ class ElementResolver(ElementResolverPort):
     ) -> ElementMatchResult:
         if not matcher.text_any:
             return ElementMatchResult(ok=False, element_id=element.element_id, detail="text_terms_missing")
-        image = self._backend.screenshot(region=region)
-        text = self._ocr.read_text(image)
+        try:
+            image = self._backend.screenshot(region=region)
+            text = self._ocr.read_text(image)
+        except Exception as exc:  # noqa: BLE001
+            return ElementMatchResult(
+                ok=False,
+                element_id=element.element_id,
+                detail=f"text_error:{type(exc).__name__}:{exc}",
+            )
         text_lower = text.lower()
         for term in matcher.text_any:
             if term and term.lower() in text_lower:

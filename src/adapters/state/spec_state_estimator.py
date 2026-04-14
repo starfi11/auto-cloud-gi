@@ -136,54 +136,64 @@ class SpecStateEstimator(StateEstimatorPort):
         )
 
     def _evaluate_node(self, node: StateNode) -> _NodeEval:
-        rec = node.recognition or {}
-        if not rec:
-            return _NodeEval(node.state, 0.0, 0, 0, [], "no_recognition")
+        try:
+            rec = node.recognition or {}
+            if not rec:
+                return _NodeEval(node.state, 0.0, 0, 0, [], "no_recognition")
 
-        profile = str(rec.get("profile", "default")).strip() or "default"
-        timeout_seconds = float(rec.get("timeout_seconds", 0.03))
-        poll_seconds = float(rec.get("poll_seconds", 0.01))
+            profile = str(rec.get("profile", "default")).strip() or "default"
+            timeout_seconds = float(rec.get("timeout_seconds", 0.03))
+            poll_seconds = float(rec.get("poll_seconds", 0.01))
 
-        expr = rec.get("expr")
-        if isinstance(expr, dict):
-            out = self._eval_expr(expr, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            expr = rec.get("expr")
+            if isinstance(expr, dict):
+                out = self._eval_expr(expr, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                return _NodeEval(
+                    state=node.state,
+                    confidence=max(0.0, min(1.0, out.score)),
+                    matched=out.matched,
+                    total=out.total,
+                    evidence_refs=out.evidence_refs,
+                    detail=out.detail,
+                )
+
+            # Legacy compatibility path
+            all_ids = [str(x) for x in rec.get("all", []) if str(x).strip()]
+            any_ids = [str(x) for x in rec.get("any", []) if str(x).strip()]
+            min_any = int(rec.get("min_any", 1)) if any_ids else 0
+            if not all_ids and not any_ids:
+                return _NodeEval(node.state, 0.0, 0, 0, [], "empty_legacy")
+
+            matched_all = 0
+            matched_any = 0
+            evidence_refs: list[str] = []
+            for eid in all_ids:
+                r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                if r.ok:
+                    matched_all += 1
+                    evidence_refs.extend(r.evidence_refs)
+            for eid in any_ids:
+                r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                if r.ok:
+                    matched_any += 1
+                    evidence_refs.extend(r.evidence_refs)
+
+            all_score = 1.0 if not all_ids else (matched_all / max(1, len(all_ids)))
+            any_score = 1.0 if not any_ids else (matched_any / max(1, len(any_ids)))
+            gated_any = 1.0 if matched_any >= min_any else any_score * 0.5
+            confidence = 0.55 * all_score + 0.45 * gated_any
+            matched = matched_all + matched_any
+            total = len(all_ids) + len(any_ids)
+            return _NodeEval(node.state, max(0.0, min(1.0, confidence)), matched, total, evidence_refs, "legacy")
+        except Exception as exc:  # noqa: BLE001
             return _NodeEval(
                 state=node.state,
-                confidence=max(0.0, min(1.0, out.score)),
-                matched=out.matched,
-                total=out.total,
-                evidence_refs=out.evidence_refs,
-                detail=out.detail,
+                confidence=0.0,
+                matched=0,
+                total=0,
+                evidence_refs=[],
+                detail=f"node_eval_error:{type(exc).__name__}:{exc}",
             )
-
-        # Legacy compatibility path
-        all_ids = [str(x) for x in rec.get("all", []) if str(x).strip()]
-        any_ids = [str(x) for x in rec.get("any", []) if str(x).strip()]
-        min_any = int(rec.get("min_any", 1)) if any_ids else 0
-        if not all_ids and not any_ids:
-            return _NodeEval(node.state, 0.0, 0, 0, [], "empty_legacy")
-
-        matched_all = 0
-        matched_any = 0
-        evidence_refs: list[str] = []
-        for eid in all_ids:
-            r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
-            if r.ok:
-                matched_all += 1
-                evidence_refs.extend(r.evidence_refs)
-        for eid in any_ids:
-            r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
-            if r.ok:
-                matched_any += 1
-                evidence_refs.extend(r.evidence_refs)
-
-        all_score = 1.0 if not all_ids else (matched_all / max(1, len(all_ids)))
-        any_score = 1.0 if not any_ids else (matched_any / max(1, len(any_ids)))
-        gated_any = 1.0 if matched_any >= min_any else any_score * 0.5
-        confidence = 0.55 * all_score + 0.45 * gated_any
-        matched = matched_all + matched_any
-        total = len(all_ids) + len(any_ids)
-        return _NodeEval(node.state, max(0.0, min(1.0, confidence)), matched, total, evidence_refs, "legacy")
 
     def _eval_expr(
         self,
