@@ -232,7 +232,10 @@ class UiMacroExecutor:
                             continue
                         results.append(MacroStepResult(op=op, ok=False, detail=f"element_miss:{resolved.detail}"))
                         continue
-                    results.append(MacroStepResult(op=op, ok=True, detail=f"element_hit:{element_id}:{resolved.matcher_kind}"))
+                    hit_detail = f"element_hit:{element_id}:{resolved.matcher_kind}:{resolved.detail}"
+                    if resolved.matched_text:
+                        hit_detail = f"{hit_detail}:matched={resolved.matched_text}"
+                    results.append(MacroStepResult(op=op, ok=True, detail=hit_detail))
                     self._after(step)
                     continue
                 if op == "click_element":
@@ -257,7 +260,10 @@ class UiMacroExecutor:
                     cx = int(bx + bw * float(step.get("anchor_x", 0.5)))
                     cy = int(by + bh * float(step.get("anchor_y", 0.5)))
                     self._backend.click(cx, cy, clicks=int(step.get("clicks", 1)))
-                    results.append(MacroStepResult(op=op, ok=True, detail=f"click_element@{cx},{cy}:{element_id}:{resolved.matcher_kind}"))
+                    hit_detail = f"click_element@{cx},{cy}:{element_id}:{resolved.matcher_kind}:{resolved.detail}"
+                    if resolved.matched_text:
+                        hit_detail = f"{hit_detail}:matched={resolved.matched_text}"
+                    results.append(MacroStepResult(op=op, ok=True, detail=hit_detail))
                     self._after(step)
                     continue
                 results.append(MacroStepResult(op=op, ok=False, detail=f"unsupported_op:{op}"))

@@ -207,6 +207,7 @@ class ElementResolver(ElementResolverPort):
                 detail=f"text_error:{type(exc).__name__}:{exc}",
             )
         text_lower = text.lower()
+        preview = self._preview_text(text)
         for term in matcher.text_any:
             if term and term.lower() in text_lower:
                 return ElementMatchResult(
@@ -217,6 +218,18 @@ class ElementResolver(ElementResolverPort):
                     bbox=region,
                     matched_text=term,
                     evidence_refs=["ocr:screen"],
-                    detail="text_hit",
+                    detail=f"text_hit:{term};ocr={preview}",
                 )
-        return ElementMatchResult(ok=False, element_id=element.element_id, detail="text_miss")
+        return ElementMatchResult(
+            ok=False,
+            element_id=element.element_id,
+            detail=f"text_miss;ocr={preview}",
+        )
+
+    def _preview_text(self, raw: str, limit: int = 60) -> str:
+        cleaned = " ".join(str(raw).split())
+        if not cleaned:
+            return "<empty>"
+        if len(cleaned) <= limit:
+            return cleaned
+        return cleaned[:limit] + "..."

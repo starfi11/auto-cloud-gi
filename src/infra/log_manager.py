@@ -4,6 +4,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 import json
+import os
 from threading import Lock
 from typing import Any
 
@@ -62,6 +63,21 @@ class LogManager:
         self._run_bundles: dict[str, RunLogBundle] = {}
         self._run_seq: dict[str, int] = {}
         self._lock = Lock()
+        self._console_lock = Lock()
+        self._console_enabled = os.getenv("LOG_CONSOLE_ENABLED", "true").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._console_verbose = os.getenv("LOG_CONSOLE_VERBOSE", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._console_level = os.getenv("LOG_CONSOLE_LEVEL", "INFO").strip().upper()
+        self._level_weight = {"DEBUG": 10, "INFO": 20, "WARN": 30, "WARNING": 30, "ERROR": 40, "FATAL": 50}
 
     @property
     def root(self) -> Path:
@@ -76,6 +92,11 @@ class LogManager:
                 "payload": _json_safe(payload),
             }
         )
+        self._console(
+            level=level,
+            message=f"[system] {event_type}",
+            payload=payload if (self._console_verbose or level.upper() in {"WARN", "WARNING", "ERROR", "FATAL"}) else None,
+        )
 
     def control_api_event(self, event_type: str, payload: dict[str, Any], level: str = "INFO") -> None:
         self._control_api.append(
@@ -85,6 +106,11 @@ class LogManager:
                 "event_type": event_type,
                 "payload": _json_safe(payload),
             }
+        )
+        self._console(
+            level=level,
+            message=f"[control-api] {event_type}",
+            payload=payload if self._console_verbose else None,
         )
 
     def _ensure_run_bundle(self, run_id: str) -> RunLogBundle:
@@ -117,6 +143,12 @@ class LogManager:
                 "payload": _json_safe(payload),
             }
         )
+        if self._console_verbose or self._is_key_run_event(event_type, level):
+            self._console(
+                level=level,
+                message=f"[run:{run_id}] {event_type}",
+                payload=self._compact_payload_for_console(event_type, payload),
+            )
 
     def state_transition(self, run_id: str, source: str, target: str, reason: str = "") -> None:
         bundle = self._ensure_run_bundle(run_id)
@@ -130,6 +162,11 @@ class LogManager:
                 "target": target,
                 "reason": reason,
             }
+        )
+        self._console(
+            level="INFO",
+            message=f"[run:{run_id}] transition {source} -> {target}",
+            payload={"reason": reason},
         )
 
     def action_event(
@@ -153,6 +190,12 @@ class LogManager:
                 "payload": _json_safe(payload or {}),
             }
         )
+        if self._console_verbose or status in {"started", "retrying", "failed", "succeeded"} or level.upper() in {"WARN", "WARNING", "ERROR"}:
+            self._console(
+                level=level,
+                message=f"[run:{run_id}] action {action_name} {status}",
+                payload=self._compact_action_payload(payload or {}),
+            )
 
     def write_run_summary(self, run_id: str, summary: dict[str, Any]) -> Path:
         bundle = self._ensure_run_bundle(run_id)
@@ -178,3 +221,86 @@ class LogManager:
                 "payload": _json_safe(payload),
             }
         )
+        if self._console_verbose and event_type in {"sense", "decision", "transition_observe", "action_result"}:
+            self._console(
+                level="INFO",
+                message=f"[run:{run_id}] replay {event_type}",
+                payload=self._compact_payload_for_console(event_type, payload),
+            )
+
+    def _is_key_run_event(self, event_type: str, level: str) -> bool:
+        if level.upper() in {"WARN", "WARNING", "ERROR", "FATAL"}:
+            return True
+        return event_type in {
+            "policy_decision",
+            "state_estimated",
+            "transition_pending_set",
+            "transition_pending_committed",
+            "run_execution_failed",
+            "run_execution_interrupted",
+            "run_accepted",
+            "run_rejected",
+        }
+
+    def _compact_action_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for key in ("kind", "attempt", "max_retries", "retryable", "elapsed_ms", "context_id", "controller_id", "detail"):
+            if key in payload:
+                out[key] = payload.get(key)
+        result = payload.get("result")
+        if isinstance(result, dict):
+            out["result"] = {
+                "ok": bool(result.get("ok", False)),
+                "detail": str(result.get("detail", "")),
+                "retryable": bool(result.get("retryable", True)),
+            }
+            macro_results = result.get("macro_results")
+            if isinstance(macro_results, list) and macro_results:
+                out["macro"] = [self._json_safe_macro_result(x) for x in macro_results[:6]]
+        return out
+
+    def _json_safe_macro_result(self, item: Any) -> dict[str, Any]:
+        if not isinstance(item, dict):
+            return {"raw": str(item)}
+        return {
+            "op": item.get("op"),
+            "ok": item.get("ok"),
+            "detail": item.get("detail"),
+        }
+
+    def _compact_payload_for_console(self, event_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if event_type == "state_estimated":
+            return {
+                "tick": payload.get("tick"),
+                "state": payload.get("state"),
+                "confidence": payload.get("confidence"),
+                "uncertainty_reason": payload.get("uncertainty_reason", ""),
+                "candidates": payload.get("perception_candidates", [])[:4],
+            }
+        if event_type == "policy_decision":
+            return {
+                "tick": payload.get("tick"),
+                "state": payload.get("state"),
+                "kind": payload.get("kind"),
+                "reason": payload.get("reason"),
+                "next_state": payload.get("next_state"),
+                "action": payload.get("action"),
+                "wait_seconds": payload.get("wait_seconds"),
+            }
+        if event_type in {"run_execution_failed", "run_execution_interrupted"}:
+            return {
+                "error": payload.get("error", payload.get("reason", "")),
+                "error_type": payload.get("error_type", ""),
+            }
+        return payload
+
+    def _console(self, *, level: str, message: str, payload: dict[str, Any] | None) -> None:
+        if not self._console_enabled:
+            return
+        if self._level_weight.get(level.upper(), 20) < self._level_weight.get(self._console_level, 20):
+            return
+        line = message
+        if payload:
+            line = f"{line} {json.dumps(_json_safe(payload), ensure_ascii=False, separators=(',', ':'))}"
+        with self._console_lock:
+            print(line, flush=True)
