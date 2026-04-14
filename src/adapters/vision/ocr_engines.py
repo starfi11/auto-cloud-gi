@@ -50,11 +50,20 @@ class PaddleOcrEngine(OcrEnginePort):
             use_doc_unwarping=use_doc_unwarping,
             use_textline_orientation=use_textline_orientation,
         )
+        runtime_flag = ""
+        try:
+            import paddle  # type: ignore
+
+            runtime_flag = str(paddle.get_flags(["FLAGS_enable_pir_api"]).get("FLAGS_enable_pir_api"))
+        except Exception:
+            runtime_flag = "<unavailable>"
         print(
             "[ocr] paddle init "
             f"lang={paddle_lang} ocr_version={ocr_version} "
             f"doc_ori={use_doc_orientation_classify} doc_unwarp={use_doc_unwarping} "
-            f"textline_ori={use_textline_orientation} FLAGS_enable_pir_api={os.getenv('FLAGS_enable_pir_api','')}",
+            f"textline_ori={use_textline_orientation} "
+            f"FLAGS_enable_pir_api_env={os.getenv('FLAGS_enable_pir_api','')} "
+            f"FLAGS_enable_pir_api_runtime={runtime_flag}",
             flush=True,
         )
 

@@ -53,6 +53,7 @@ python scripts/check_runtime_deps.py
 ```
 
 默认 OCR 引擎为 `PaddleOCR`（`OCR_ENGINE=paddle`）。
+已验证稳定组合：`paddlepaddle==3.2.0` + `paddleocr==3.3.3`。
 
 推荐在 `.env` 设置：
 

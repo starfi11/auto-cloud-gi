@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Kernel-first refactor for auto-cloud-gi"
 requires-python = ">=3.10"
 dependencies = [
-  "pyautogui>=0.9.54",
-  "paddleocr>=2.8.1",
-  "paddlepaddle>=2.6.1",
+  "pyautogui==0.9.54",
+  "paddleocr==3.3.3",
+  "paddlepaddle==3.2.0",
 ]
 
 [project.scripts]

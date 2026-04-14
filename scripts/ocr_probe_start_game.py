@@ -13,6 +13,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
+def _load_dotenv(dotenv_path: Path) -> None:
+    if not dotenv_path.exists():
+        return
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ[k.strip()] = v.strip().strip('"').strip("'")
+
 from src.adapters.perception.element_registry import ElementRegistry
 from src.adapters.perception.element_resolver import ElementResolver
 from src.adapters.runtime.ui_macro import build_ui_backend
@@ -49,6 +60,7 @@ def _save_image(image: Any, path: Path) -> None:
 
 
 def main() -> int:
+    _load_dotenv(PROJECT_ROOT / ".env")
     parser = argparse.ArgumentParser(description="Probe OCR/template matching for start-game element.")
     parser.add_argument("--element-id", default="cloud_start_game_button")
     parser.add_argument("--profile", default="genshin_cloud")
