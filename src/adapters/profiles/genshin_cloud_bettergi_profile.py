@@ -158,7 +158,14 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     wait_seconds=0.12,
                     stable_ticks=1,
-                    expected_next=None,  # hub: broad scan over all recognizers
+                    expected_next=(
+                        "S_DAILY_REWARD_POPUP",
+                        "S_CLOUD_HOME",
+                        "S_QUEUEING",
+                        "S_ENTER_PROMPT",
+                        "S_KONGYUE",
+                        "S_IN_GAME",
+                    ),
                 ),
                 StateNode(
                     state="S_DAILY_REWARD_POPUP",
@@ -317,7 +324,11 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="bettergi_panel",
                     wait_seconds=0.15,
                     stable_ticks=1,
-                    expected_next=None,  # hub: broad scan over btgi recognizers
+                    expected_next=(
+                        "S_BTGI_CHECK_UPDATE",
+                        "S_BTGI_HOME",
+                        "S_IN_GAME",
+                    ),
                 ),
                 StateNode(
                     state="S_BTGI_CHECK_UPDATE",

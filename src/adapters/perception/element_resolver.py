@@ -122,7 +122,15 @@ class ElementResolver(ElementResolverPort):
             return cached  # type: ignore[return-value]
 
         last_detail = "element_miss"
-        for phase in ("roi", "expand", "global"):
+        # ROI contract: if the element declares an ROI, "this is where to look".
+        # Fall through roi -> expand only; do NOT silently escalate to a full
+        # screen scan, which defeats the ROI and causes phantom matches on
+        # unrelated on-screen text. Elements without ROI go straight to global.
+        if element.roi is None:
+            phases: tuple[str, ...] = ("global",)
+        else:
+            phases = ("roi", "expand")
+        for phase in phases:
             region = self._region_for_phase(element, phase)
             for matcher in self._ordered_matchers(element.matchers):
                 found = self._try_match(
