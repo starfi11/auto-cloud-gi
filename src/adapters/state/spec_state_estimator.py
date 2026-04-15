@@ -14,6 +14,24 @@ from src.ports.state_estimator_port import StateEstimatorPort
 
 
 @dataclass
+class _LeafDebug:
+    """Per-clause diagnostic info for state recognition.
+
+    Captured for every present/absent leaf so that state_estimated logs
+    can show the actual OCR output vs the expected text, plus the
+    element_id and ROI that were scanned. Without this, "confidence=0"
+    is indistinguishable from "capture failed".
+    """
+
+    clause: str  # "present:elem_x" | "absent:elem_y"
+    element_id: str
+    ok: bool
+    ocr_text: str = ""
+    region: tuple[int, int, int, int] | None = None
+    detail: str = ""
+
+
+@dataclass
 class _NodeEval:
     state: str
     confidence: float
@@ -21,6 +39,7 @@ class _NodeEval:
     total: int
     evidence_refs: list[str]
     detail: str
+    leaves: list[_LeafDebug]
 
 
 @dataclass
@@ -31,6 +50,7 @@ class _CondEval:
     total: int
     evidence_refs: list[str]
     detail: str
+    leaves: list[_LeafDebug]
 
 
 class SpecStateEstimator(StateEstimatorPort):
@@ -109,12 +129,28 @@ class SpecStateEstimator(StateEstimatorPort):
                 has_any_recognition = True
             ev = self._evaluate_node(node, frame)
             evals.append(ev)
+            leaves_meta = [
+                {
+                    "clause": lf.clause,
+                    "element_id": lf.element_id,
+                    "ok": lf.ok,
+                    "ocr_text": lf.ocr_text[:80],
+                    "region": list(lf.region) if lf.region else None,
+                    "detail": lf.detail,
+                }
+                for lf in ev.leaves
+            ]
             candidates.append(
                 PerceptionCandidate(
                     label=node.state,
                     confidence=ev.confidence,
                     kind="state",
-                    meta={"matched": ev.matched, "total": ev.total, "detail": ev.detail},
+                    meta={
+                        "matched": ev.matched,
+                        "total": ev.total,
+                        "detail": ev.detail,
+                        "leaves": leaves_meta,
+                    },
                 )
             )
             all_evidence.extend(ev.evidence_refs)
@@ -129,6 +165,10 @@ class SpecStateEstimator(StateEstimatorPort):
 
         best = max(evals, key=lambda e: e.confidence)
         frame_stats = frame.stats()
+        frame_path: str | None = None
+        if os.getenv("ACGI_SAVE_FRAMES", "").strip() in {"1", "true", "True"}:
+            out_dir = os.getenv("ACGI_FRAMES_DIR", "./runtime/frames").strip() or "./runtime/frames"
+            frame_path = frame.save_full_frame(out_dir, tag=best.state)
         if best.confidence <= 0.01:
             return StateEstimate(
                 state=context.state or sp.initial_state,
@@ -137,8 +177,12 @@ class SpecStateEstimator(StateEstimatorPort):
                     "source": "fallback_context",
                     "current": context.state,
                     "scan_mode": scan_mode,
+                    "expected_states": list(expected_states) if expected_states else None,
                     "nodes_evaluated": len(evals),
                     "ocr_calls": frame_stats["ocr_calls"],
+                    "capture_ms": frame_stats["capture_ms"],
+                    "ocr_ms": frame_stats["ocr_ms"],
+                    "frame_path": frame_path,
                 },
                 perception=PerceptionResult(
                     ok=False,
@@ -157,8 +201,12 @@ class SpecStateEstimator(StateEstimatorPort):
                 "source": "spec_recognizer",
                 "best_state": best.state,
                 "scan_mode": scan_mode,
+                "expected_states": list(expected_states) if expected_states else None,
                 "nodes_evaluated": len(evals),
                 "ocr_calls": frame_stats["ocr_calls"],
+                "capture_ms": frame_stats["capture_ms"],
+                "ocr_ms": frame_stats["ocr_ms"],
+                "frame_path": frame_path,
             },
             perception=PerceptionResult(
                 ok=True,
@@ -174,7 +222,7 @@ class SpecStateEstimator(StateEstimatorPort):
         try:
             rec = node.recognition or {}
             if not rec:
-                return _NodeEval(node.state, 0.0, 0, 0, [], "no_recognition")
+                return _NodeEval(node.state, 0.0, 0, 0, [], "no_recognition", [])
 
             profile = str(rec.get("profile", "default")).strip() or "default"
             # timeout_seconds/poll_seconds in recognition dicts are legacy —
@@ -190,6 +238,7 @@ class SpecStateEstimator(StateEstimatorPort):
                     total=out.total,
                     evidence_refs=out.evidence_refs,
                     detail=out.detail,
+                    leaves=out.leaves,
                 )
 
             # Legacy compatibility path
@@ -197,18 +246,39 @@ class SpecStateEstimator(StateEstimatorPort):
             any_ids = [str(x) for x in rec.get("any", []) if str(x).strip()]
             min_any = int(rec.get("min_any", 1)) if any_ids else 0
             if not all_ids and not any_ids:
-                return _NodeEval(node.state, 0.0, 0, 0, [], "empty_legacy")
+                return _NodeEval(node.state, 0.0, 0, 0, [], "empty_legacy", [])
 
             matched_all = 0
             matched_any = 0
             evidence_refs: list[str] = []
+            leaves: list[_LeafDebug] = []
             for eid in all_ids:
                 r = self._match_present(eid, profile=profile, frame=frame)
+                leaves.append(
+                    _LeafDebug(
+                        clause=f"present:{eid}",
+                        element_id=eid,
+                        ok=r.ok,
+                        ocr_text=r.ocr_text,
+                        region=r.region_scanned,
+                        detail=r.detail,
+                    )
+                )
                 if r.ok:
                     matched_all += 1
                     evidence_refs.extend(r.evidence_refs)
             for eid in any_ids:
                 r = self._match_present(eid, profile=profile, frame=frame)
+                leaves.append(
+                    _LeafDebug(
+                        clause=f"present:{eid}",
+                        element_id=eid,
+                        ok=r.ok,
+                        ocr_text=r.ocr_text,
+                        region=r.region_scanned,
+                        detail=r.detail,
+                    )
+                )
                 if r.ok:
                     matched_any += 1
                     evidence_refs.extend(r.evidence_refs)
@@ -219,7 +289,15 @@ class SpecStateEstimator(StateEstimatorPort):
             confidence = 0.55 * all_score + 0.45 * gated_any
             matched = matched_all + matched_any
             total = len(all_ids) + len(any_ids)
-            return _NodeEval(node.state, max(0.0, min(1.0, confidence)), matched, total, evidence_refs, "legacy")
+            return _NodeEval(
+                node.state,
+                max(0.0, min(1.0, confidence)),
+                matched,
+                total,
+                evidence_refs,
+                "legacy",
+                leaves,
+            )
         except Exception as exc:  # noqa: BLE001
             return _NodeEval(
                 state=node.state,
@@ -228,6 +306,7 @@ class SpecStateEstimator(StateEstimatorPort):
                 total=0,
                 evidence_refs=[],
                 detail=f"node_eval_error:{type(exc).__name__}:{exc}",
+                leaves=[],
             )
 
     def _eval_expr(
@@ -242,7 +321,7 @@ class SpecStateEstimator(StateEstimatorPort):
             raw_items = expr.get("items", [])
             items = [i for i in raw_items if isinstance(i, dict)] if isinstance(raw_items, list) else []
             if not items:
-                return _CondEval(False, 0.0, 0, 0, [], f"{op}_empty")
+                return _CondEval(False, 0.0, 0, 0, [], f"{op}_empty", [])
             evals = [
                 self._eval_clause(i, profile=profile, frame=frame)
                 for i in items
@@ -250,6 +329,7 @@ class SpecStateEstimator(StateEstimatorPort):
             matched = sum(1 for e in evals if e.ok)
             total = len(evals)
             evidence = [x for e in evals for x in e.evidence_refs]
+            leaves = [x for e in evals for x in e.leaves]
             # Score = matched/total directly. The previous min(raw, 0.45)
             # cap existed to suppress phantom partial matches under broad
             # scan (e.g. `all[absent(a), absent(b), present(c)]` scoring 2/3
@@ -260,20 +340,28 @@ class SpecStateEstimator(StateEstimatorPort):
             raw = matched / max(1, total)
             if op == "all":
                 ok = matched == total
-                return _CondEval(ok, raw, matched, total, evidence, f"all:{matched}/{total}")
+                return _CondEval(ok, raw, matched, total, evidence, f"all:{matched}/{total}", leaves)
             if op == "any":
                 ok = matched >= 1
-                return _CondEval(ok, raw, matched, total, evidence, f"any:{matched}/{total}")
+                return _CondEval(ok, raw, matched, total, evidence, f"any:{matched}/{total}", leaves)
             k = int(expr.get("k", 1))
             ok = matched >= k
-            return _CondEval(ok, raw, matched, total, evidence, f"kof:{matched}/{total},k={k}")
+            return _CondEval(ok, raw, matched, total, evidence, f"kof:{matched}/{total},k={k}", leaves)
 
         if op == "not":
             item = expr.get("item")
             if not isinstance(item, dict):
-                return _CondEval(False, 0.0, 0, 1, [], "not_missing_item")
+                return _CondEval(False, 0.0, 0, 1, [], "not_missing_item", [])
             inner = self._eval_clause(item, profile=profile, frame=frame)
-            return _CondEval(not inner.ok, 1.0 if not inner.ok else 0.0, 1 if not inner.ok else 0, 1, inner.evidence_refs, "not")
+            return _CondEval(
+                not inner.ok,
+                1.0 if not inner.ok else 0.0,
+                1 if not inner.ok else 0,
+                1,
+                inner.evidence_refs,
+                "not",
+                inner.leaves,
+            )
 
         return self._eval_clause(expr, profile=profile, frame=frame)
 
@@ -300,13 +388,45 @@ class SpecStateEstimator(StateEstimatorPort):
 
         if present:
             r = self._match_present(present, profile=profile, frame=frame)
-            return _CondEval(r.ok, 1.0 if r.ok else 0.0, 1 if r.ok else 0, 1, r.evidence_refs, f"present:{present}")
+            leaf = _LeafDebug(
+                clause=f"present:{present}",
+                element_id=present,
+                ok=r.ok,
+                ocr_text=r.ocr_text,
+                region=r.region_scanned,
+                detail=r.detail,
+            )
+            return _CondEval(
+                r.ok,
+                1.0 if r.ok else 0.0,
+                1 if r.ok else 0,
+                1,
+                r.evidence_refs,
+                f"present:{present}",
+                [leaf],
+            )
         if absent:
             r = self._match_present(absent, profile=profile, frame=frame)
             ok = not r.ok
-            return _CondEval(ok, 1.0 if ok else 0.0, 1 if ok else 0, 1, r.evidence_refs, f"absent:{absent}")
+            leaf = _LeafDebug(
+                clause=f"absent:{absent}",
+                element_id=absent,
+                ok=ok,
+                ocr_text=r.ocr_text,
+                region=r.region_scanned,
+                detail=r.detail,
+            )
+            return _CondEval(
+                ok,
+                1.0 if ok else 0.0,
+                1 if ok else 0,
+                1,
+                r.evidence_refs,
+                f"absent:{absent}",
+                [leaf],
+            )
 
-        return _CondEval(False, 0.0, 0, 1, [], "unknown_clause")
+        return _CondEval(False, 0.0, 0, 1, [], "unknown_clause", [])
 
     def _match_present(self, element_id: str, *, profile: str, frame: FrameContext):
         return self._resolver.resolve_once(

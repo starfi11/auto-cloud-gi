@@ -249,7 +249,12 @@ class ElementResolver(ElementResolverPort):
         frame: FrameContext,
     ) -> ElementMatchResult:
         if not matcher.text_any:
-            return ElementMatchResult(ok=False, element_id=element.element_id, detail="text_terms_missing")
+            return ElementMatchResult(
+                ok=False,
+                element_id=element.element_id,
+                detail="text_terms_missing",
+                region_scanned=region,
+            )
         try:
             text = frame.get_ocr_text(region, self._ocr)
         except Exception as exc:  # noqa: BLE001
@@ -257,6 +262,7 @@ class ElementResolver(ElementResolverPort):
                 ok=False,
                 element_id=element.element_id,
                 detail=f"text_error:{type(exc).__name__}:{exc}",
+                region_scanned=region,
             )
         text_lower = text.lower()
         preview = self._preview_text(text)
@@ -271,11 +277,15 @@ class ElementResolver(ElementResolverPort):
                     matched_text=term,
                     evidence_refs=["ocr:screen"],
                     detail=f"text_hit:{term};ocr={preview}",
+                    ocr_text=text,
+                    region_scanned=region,
                 )
         return ElementMatchResult(
             ok=False,
             element_id=element.element_id,
             detail=f"text_miss;ocr={preview}",
+            ocr_text=text,
+            region_scanned=region,
         )
 
     def _preview_text(self, raw: str, limit: int = 60) -> str:

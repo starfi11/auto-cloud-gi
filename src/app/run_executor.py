@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from time import perf_counter, sleep
 from typing import Callable, Any, Protocol
 
@@ -96,6 +97,7 @@ class RunExecutor:
             raise RuntimeError("state_driven mode missing state_plan")
 
         self._transition(context, str(Stage.LOAD_POLICY), reason="state_plan_ready")
+        self._emit_runtime_probe(context)
         if context.state in {"", "BOOTSTRAP", str(Stage.LOAD_POLICY)}:
             self._transition(context, state_plan.initial_state, reason="state_plan_initial_state")
 
@@ -104,7 +106,9 @@ class RunExecutor:
             if self._process_pending_transition(context, plan, tick):
                 continue
             expected = self._expected_states_for_scan(context, plan)
+            tick_t0 = perf_counter()
             estimate = self._state_estimator.estimate(context, plan, expected_states=expected)
+            estimate_ms = round((perf_counter() - tick_t0) * 1000.0, 1)
             # Narrow-scan low-confidence fallback: if we've been getting weak
             # signals under narrow scan for several ticks, try one broad scan
             # to catch unexpected drift (e.g. expected_next misconfigured or
@@ -131,13 +135,20 @@ class RunExecutor:
                     "state": estimate.state,
                     "confidence": estimate.confidence,
                     "signals": estimate.signals,
+                    "estimate_ms": estimate_ms,
+                    "expected_states": expected,
                     "uncertainty_reason": estimate.uncertainty_reason,
                     "perception_top_confidence": (
                         estimate.perception.top_confidence if estimate.perception is not None else None
                     ),
                     "perception_candidates": (
                         [
-                            {"label": c.label, "confidence": c.confidence, "kind": c.kind}
+                            {
+                                "label": c.label,
+                                "confidence": c.confidence,
+                                "kind": c.kind,
+                                "meta": c.meta,
+                            }
                             for c in estimate.perception.candidates
                         ]
                         if estimate.perception is not None
@@ -239,6 +250,33 @@ class RunExecutor:
             raise RuntimeError(f"unsupported_policy_decision:{decision.kind}")
 
         raise RuntimeError(f"state_driven_tick_limit_exceeded:max_ticks={state_plan.max_ticks}")
+
+    def _emit_runtime_probe(self, context: RunContext) -> None:
+        backend_name = ""
+        backend_size: tuple[int, int] | None = None
+        try:
+            inner = getattr(self._state_estimator, "_backend", None)
+            if inner is not None:
+                backend_name = type(inner).__name__
+                if hasattr(inner, "size"):
+                    try:
+                        backend_size = inner.size()
+                    except Exception:
+                        backend_size = None
+        except Exception:
+            pass
+        save_frames = os.getenv("ACGI_SAVE_FRAMES", "").strip() in {"1", "true", "True"}
+        self._logs.run_event(
+            context.run_id,
+            "runtime_probe",
+            {
+                "backend": backend_name or "unknown",
+                "screen_size": list(backend_size) if backend_size else None,
+                "ui_automation_mode": os.getenv("UI_AUTOMATION_BACKEND", "auto"),
+                "save_frames": save_frames,
+                "frames_dir": os.getenv("ACGI_FRAMES_DIR", "./runtime/frames") if save_frames else None,
+            },
+        )
 
     def _expected_states_for_scan(
         self, context: RunContext, plan: WorkflowPlan

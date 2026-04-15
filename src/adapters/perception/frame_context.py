@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from time import monotonic
+import os
+from pathlib import Path
+from time import monotonic, perf_counter
 from typing import Any, Protocol
 
 
@@ -28,6 +30,8 @@ class FrameContext:
         self._roi_cache: dict[tuple[int, int, int, int], Any] = {}
         self._ocr_cache: dict[tuple[Any, str], str] = {}
         self._element_cache: dict[tuple[str, str], Any] = {}
+        self._capture_ms: float = 0.0
+        self._ocr_ms: float = 0.0
 
     @property
     def captured_at(self) -> float:
@@ -36,11 +40,14 @@ class FrameContext:
     def ensure_full(self) -> Any | None:
         if self._full is not None or self._full_failed:
             return self._full
+        t0 = perf_counter()
         try:
             img = self._backend.screenshot(region=None)
         except Exception:
             self._full_failed = True
+            self._capture_ms += (perf_counter() - t0) * 1000.0
             return None
+        self._capture_ms += (perf_counter() - t0) * 1000.0
         if img is None:
             self._full_failed = True
             return None
@@ -94,10 +101,12 @@ class FrameContext:
         if img is None:
             self._ocr_cache[cache_key] = ""
             return ""
+        t0 = perf_counter()
         try:
             text = ocr_engine.read_text(img) or ""
         except Exception:
             text = ""
+        self._ocr_ms += (perf_counter() - t0) * 1000.0
         self._ocr_cache[cache_key] = text
         return text
 
@@ -107,10 +116,42 @@ class FrameContext:
     def cache_element(self, element_id: str, profile: str, result: Any) -> None:
         self._element_cache[(element_id, profile)] = result
 
-    def stats(self) -> dict[str, int]:
+    def stats(self) -> dict[str, Any]:
         return {
             "full_captured": 1 if self._full is not None else 0,
             "roi_crops": len(self._roi_cache),
             "ocr_calls": len(self._ocr_cache),
             "element_hits": len(self._element_cache),
+            "capture_ms": round(self._capture_ms, 1),
+            "ocr_ms": round(self._ocr_ms, 1),
         }
+
+    def save_full_frame(self, out_dir: str | Path, *, tag: str = "") -> str | None:
+        """Best-effort save of the full frame as JPEG for post-mortem debug.
+
+        Returns the file path on success, None otherwise. Intended to be gated
+        by an env var at the call site so production runs don't accumulate
+        artifacts by default.
+        """
+        img = self.ensure_full()
+        if img is None:
+            return None
+        try:
+            path = Path(out_dir)
+            path.mkdir(parents=True, exist_ok=True)
+            ts = int(monotonic() * 1000)
+            suffix = f"_{tag}" if tag else ""
+            fp = path / f"frame_{ts}{suffix}.jpg"
+            if hasattr(img, "save"):
+                img.save(fp, format="JPEG", quality=70)
+            else:
+                try:
+                    import numpy as np  # noqa: F401
+                    import cv2  # type: ignore
+
+                    cv2.imwrite(str(fp), img)
+                except Exception:
+                    return None
+            return str(fp)
+        except Exception:
+            return None

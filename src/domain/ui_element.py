@@ -45,3 +45,8 @@ class ElementMatchResult:
     matched_text: str = ""
     evidence_refs: list[str] = field(default_factory=list)
     detail: str = ""
+    # Diagnostic fields for text_ocr matchers: the actual OCR output and the
+    # region that was scanned. Populated best-effort for both hits and misses
+    # so downstream logging can see "OCR read X but rule wanted Y".
+    ocr_text: str = ""
+    region_scanned: tuple[int, int, int, int] | None = None
