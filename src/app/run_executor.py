@@ -103,7 +103,26 @@ class RunExecutor:
             self._check_preempt(context)
             if self._process_pending_transition(context, plan, tick):
                 continue
-            estimate = self._state_estimator.estimate(context, plan)
+            expected = self._expected_states_for_scan(context, plan)
+            estimate = self._state_estimator.estimate(context, plan, expected_states=expected)
+            # Narrow-scan low-confidence fallback: if we've been getting weak
+            # signals under narrow scan for several ticks, try one broad scan
+            # to catch unexpected drift (e.g. expected_next misconfigured or
+            # game went to an unforeseen state).
+            if expected is not None:
+                if estimate.confidence < 0.4:
+                    narrow_low = int(context.retries.get("_narrow_scan_low", 0)) + 1
+                    context.retries["_narrow_scan_low"] = narrow_low
+                    if narrow_low >= 3:
+                        context.retries["_narrow_scan_low"] = 0
+                        estimate = self._state_estimator.estimate(context, plan, expected_states=None)
+                        self._logs.run_event(
+                            context.run_id,
+                            "narrow_scan_fallback_broad",
+                            {"tick": tick, "current_state": context.state},
+                        )
+                else:
+                    context.retries["_narrow_scan_low"] = 0
             self._logs.run_event(
                 context.run_id,
                 "state_estimated",
@@ -199,14 +218,18 @@ class RunExecutor:
                 if stage:
                     self._transition(context, str(stage), reason=f"intent:{step.name}")
                 self._run_step(context, step)
-                # Track that this state's action has executed (for re-entry detection).
-                reentry_key = f"_action_done:{estimate.state}"
+                # Track that the *acting* state's action has executed (for
+                # re-entry detection). Must use context.state — the state the
+                # policy acted on — not estimate.state, which may be a
+                # phantom recognition of some other state.
+                acting_state = context.state or estimate.state
+                reentry_key = f"_action_done:{acting_state}"
                 context.retries[reentry_key] = int(context.retries.get(reentry_key, 0)) + 1
                 if decision.next_state:
                     self._create_pending_transition(
                         plan=plan,
                         context=context,
-                        source_state=estimate.state,
+                        source_state=acting_state,
                         target_state=decision.next_state,
                         reason=f"action_success:{step.name}",
                         step=step,
@@ -216,6 +239,31 @@ class RunExecutor:
             raise RuntimeError(f"unsupported_policy_decision:{decision.kind}")
 
         raise RuntimeError(f"state_driven_tick_limit_exceeded:max_ticks={state_plan.max_ticks}")
+
+    def _expected_states_for_scan(
+        self, context: RunContext, plan: WorkflowPlan
+    ) -> list[str] | None:
+        """Derive narrow-scan candidate list from context.state.
+
+        Returns None for broad scan when:
+          - current state is unknown / missing
+          - current node is not in the plan
+          - current node is a hub (expected_next is None)
+        """
+        current = (context.state or "").strip()
+        if not current:
+            return None
+        sp = plan.state_plan
+        if sp is None:
+            return None
+        node = sp.node_for(current)
+        if node is None or node.expected_next is None:
+            return None
+        out = [current]
+        for s in node.expected_next:
+            if s not in out:
+                out.append(s)
+        return out
 
     def _create_pending_transition(
         self,
@@ -288,7 +336,16 @@ class RunExecutor:
 
         require_observed = bool(pending.get("require_observed", False))
         if self._state_estimator is not None:
-            estimate = self._state_estimator.estimate(context, plan)
+            # During a pending transition we only care whether we've arrived
+            # at target_state (or are still sitting in source_state). Narrow
+            # scan to those two states to keep OCR cost low.
+            pending_expected: list[str] | None = [target_state]
+            src = str(pending.get("source_state", "")).strip()
+            if src and src not in pending_expected:
+                pending_expected.append(src)
+            estimate = self._state_estimator.estimate(
+                context, plan, expected_states=pending_expected
+            )
             if estimate.state == target_state:
                 pending["observed_ticks"] = int(pending.get("observed_ticks", 0)) + 1
             else:

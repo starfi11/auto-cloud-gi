@@ -1,3 +1,4 @@
 pyautogui==0.9.54
 paddleocr==3.3.3
 paddlepaddle==3.2.0
+dxcam>=0.0.5 ; sys_platform == "win32"

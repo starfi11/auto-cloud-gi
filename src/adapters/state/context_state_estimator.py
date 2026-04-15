@@ -7,7 +7,12 @@ from src.ports.state_estimator_port import StateEstimatorPort
 
 
 class ContextStateEstimator(StateEstimatorPort):
-    def estimate(self, context: RunContext, plan: WorkflowPlan) -> StateEstimate:
+    def estimate(
+        self,
+        context: RunContext,
+        plan: WorkflowPlan,
+        expected_states: list[str] | None = None,
+    ) -> StateEstimate:
         state = context.state
         if not state and plan.state_plan is not None:
             state = plan.state_plan.initial_state

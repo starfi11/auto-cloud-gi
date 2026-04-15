@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from time import sleep
+from time import sleep, monotonic
 from typing import Any, Protocol
 
 from src.adapters.perception.element_resolver import ElementResolver
@@ -117,13 +117,172 @@ class PyAutoGuiBackend:
         return self._pg.screenshot(region=(x, y, w, h))
 
 
+class DxcamBackend:
+    """Capture-only backend using DXGI Desktop Duplication via dxcam.
+
+    Captures DirectX / hardware-overlay content that GDI-based backends
+    (pyautogui, PIL.ImageGrab) cannot see. Input ops (click/hotkey/etc.)
+    are not implemented — use HybridBackend to pair this with an input
+    backend.
+    """
+
+    def __init__(self, output_idx: int | None = None) -> None:
+        import dxcam  # type: ignore
+
+        self._dxcam = dxcam
+        kwargs: dict[str, Any] = {"output_color": "RGB"}
+        if output_idx is not None:
+            kwargs["output_idx"] = int(output_idx)
+        cam = dxcam.create(**kwargs)
+        if cam is None:
+            raise RuntimeError("dxcam_create_returned_none")
+        self._cam = cam
+        # Warm-up: first grab after create is often None; force a real frame
+        # so the size probe and first real capture succeed.
+        first = self._grab_raw(None, retries=10, delay=0.02)
+        if first is None:
+            raise RuntimeError("dxcam_warmup_failed")
+        h, w = first.shape[:2]
+        self._width = int(w)
+        self._height = int(h)
+
+    def size(self) -> tuple[int, int]:
+        return self._width, self._height
+
+    def click(self, x: int, y: int, clicks: int = 1) -> None:  # pragma: no cover
+        raise NotImplementedError("DxcamBackend is capture-only")
+
+    def scroll(self, amount: int) -> None:  # pragma: no cover
+        raise NotImplementedError("DxcamBackend is capture-only")
+
+    def hotkey(self, *keys: str) -> None:  # pragma: no cover
+        raise NotImplementedError("DxcamBackend is capture-only")
+
+    def _grab_raw(
+        self,
+        region: tuple[int, int, int, int] | None,
+        *,
+        retries: int = 5,
+        delay: float = 0.005,
+    ):
+        # dxcam region is (left, top, right, bottom); our region is (x, y, w, h).
+        rg = None
+        if region is not None:
+            x, y, w, h = region
+            rg = (int(x), int(y), int(x + w), int(y + h))
+        deadline = monotonic() + max(0.0, retries * delay)
+        attempt = 0
+        while True:
+            frame = self._cam.grab(region=rg) if rg else self._cam.grab()
+            if frame is not None:
+                return frame
+            attempt += 1
+            if attempt >= retries or monotonic() >= deadline:
+                return None
+            sleep(delay)
+
+    def screenshot(self, region: tuple[int, int, int, int] | None = None) -> Any:
+        frame = self._grab_raw(region)
+        if frame is None:
+            return None
+        try:
+            from PIL import Image  # type: ignore
+
+            return Image.fromarray(frame)
+        except Exception:
+            return frame  # numpy RGB array fallback
+
+    def locate_template(
+        self,
+        template_path: str,
+        *,
+        confidence: float = 0.9,
+        grayscale: bool = True,
+        region: tuple[int, int, int, int] | None = None,
+    ) -> tuple[int, int, int, int] | None:
+        try:
+            import cv2  # type: ignore
+            import numpy as np  # type: ignore
+        except Exception:
+            return None
+        frame = self._grab_raw(region)
+        if frame is None:
+            return None
+        tmpl_flag = cv2.IMREAD_GRAYSCALE if grayscale else cv2.IMREAD_COLOR
+        tmpl = cv2.imread(template_path, tmpl_flag)
+        if tmpl is None:
+            return None
+        haystack = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY) if grayscale else cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        if haystack.shape[0] < tmpl.shape[0] or haystack.shape[1] < tmpl.shape[1]:
+            return None
+        res = cv2.matchTemplate(haystack, tmpl, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+        if float(max_val) < float(confidence):
+            return None
+        th, tw = tmpl.shape[:2]
+        mx, my = int(max_loc[0]), int(max_loc[1])
+        if region is not None:
+            mx += int(region[0])
+            my += int(region[1])
+        return mx, my, int(tw), int(th)
+
+
+class HybridBackend:
+    """Capture via dxcam, input via pyautogui.
+
+    dxcam sees DirectX content; pyautogui handles click/scroll/hotkey
+    reliably. Template matching runs against dxcam frames via cv2, so it
+    stays consistent with what the rest of the perception layer sees.
+    """
+
+    def __init__(self, output_idx: int | None = None) -> None:
+        self._input = PyAutoGuiBackend()
+        self._cam = DxcamBackend(output_idx=output_idx)
+
+    def size(self) -> tuple[int, int]:
+        return self._input.size()
+
+    def click(self, x: int, y: int, clicks: int = 1) -> None:
+        self._input.click(x, y, clicks=clicks)
+
+    def scroll(self, amount: int) -> None:
+        self._input.scroll(amount)
+
+    def hotkey(self, *keys: str) -> None:
+        self._input.hotkey(*keys)
+
+    def screenshot(self, region: tuple[int, int, int, int] | None = None) -> Any:
+        return self._cam.screenshot(region=region)
+
+    def locate_template(
+        self,
+        template_path: str,
+        *,
+        confidence: float = 0.9,
+        grayscale: bool = True,
+        region: tuple[int, int, int, int] | None = None,
+    ) -> tuple[int, int, int, int] | None:
+        return self._cam.locate_template(
+            template_path,
+            confidence=confidence,
+            grayscale=grayscale,
+            region=region,
+        )
+
+
 def build_ui_backend(mode: str = "auto") -> UiBackend:
     m = mode.strip().lower()
     if m == "noop":
         return NoopUiBackend()
     if m == "pyautogui":
         return PyAutoGuiBackend()
+    if m in {"dxcam", "hybrid"}:
+        return HybridBackend()
     if m == "auto":
+        try:
+            return HybridBackend()
+        except Exception:
+            pass
         try:
             return PyAutoGuiBackend()
         except Exception:

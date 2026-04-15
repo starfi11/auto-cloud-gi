@@ -150,6 +150,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
                     stable_ticks=1,
+                    expected_next=("S_DISCOVER_CLOUD",),
                 ),
                 StateNode(
                     state="S_DISCOVER_CLOUD",
@@ -157,6 +158,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     wait_seconds=0.12,
                     stable_ticks=1,
+                    expected_next=None,  # hub: broad scan over all recognizers
                 ),
                 StateNode(
                     state="S_DAILY_REWARD_POPUP",
@@ -171,6 +173,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
                     stable_ticks=2,
+                    expected_next=("S_DISCOVER_CLOUD", "S_CLOUD_HOME"),
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
@@ -199,6 +202,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
                     stable_ticks=2,
+                    expected_next=("S_DISCOVER_CLOUD", "S_QUEUEING", "S_ENTER_PROMPT"),
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {"present": "cloud_start_game_button"},
@@ -212,6 +216,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     wait_seconds=0.3,
                     stable_ticks=3,
+                    expected_next=("S_QUEUEING", "S_ENTER_PROMPT"),
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
@@ -240,6 +245,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
                     stable_ticks=4,
+                    expected_next=("S_DISCOVER_CLOUD", "S_KONGYUE", "S_IN_GAME"),
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
@@ -267,6 +273,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="genshin_window",
                     next_state="S_DISCOVER_CLOUD",
                     stable_ticks=3,
+                    expected_next=("S_DISCOVER_CLOUD", "S_IN_GAME"),
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {"present": "cloud_kongyue_reward_text"},
@@ -287,6 +294,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="bettergi_panel",
                     next_state="S_BTGI_DISCOVER",
                     stable_ticks=2,
+                    expected_next=("S_BTGI_DISCOVER",),
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
@@ -309,6 +317,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="bettergi_panel",
                     wait_seconds=0.15,
                     stable_ticks=1,
+                    expected_next=None,  # hub: broad scan over btgi recognizers
                 ),
                 StateNode(
                     state="S_BTGI_CHECK_UPDATE",
@@ -328,6 +337,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="bettergi_panel",
                     next_state="S_BTGI_DISCOVER",
                     stable_ticks=2,
+                    expected_next=("S_BTGI_DISCOVER", "S_BTGI_HOME"),
                     recognition={
                         "profile": "bettergi",
                         "expr": {
@@ -354,6 +364,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     context_id="bettergi_panel",
                     next_state="S_DONE",
                     stable_ticks=2,
+                    expected_next=("S_DONE",),
                     recognition={
                         "profile": "bettergi",
                         "expr": {"present": "btgi_home"},

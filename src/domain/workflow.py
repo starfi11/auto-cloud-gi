@@ -42,6 +42,10 @@ class StateNode:
     recognition: dict[str, Any] = field(default_factory=dict)
     controller_id: str | None = None
     context_id: str | None = None
+    # Legal successor states for narrow-scan observation sync.
+    # None  -> hub/broad-scan (estimator evaluates every node in the plan).
+    # list  -> narrow scan restricted to these successors + self.
+    expected_next: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +60,28 @@ class StatePlan:
             if node.state == state:
                 return node
         return None
+
+    def validate_expected_next(self) -> list[str]:
+        """Return a list of validation errors. Empty list means ok.
+
+        Checks:
+          - every state in any expected_next exists in the plan or is terminal
+          - every node.next_state (if set) appears in that node's expected_next
+            (unless expected_next is None, meaning broad scan)
+        """
+        known = {n.state for n in self.nodes} | set(self.terminal_states)
+        errors: list[str] = []
+        for node in self.nodes:
+            if node.expected_next is None:
+                continue
+            for succ in node.expected_next:
+                if succ not in known:
+                    errors.append(f"{node.state}.expected_next references unknown state {succ!r}")
+            if node.next_state and node.next_state not in node.expected_next:
+                errors.append(
+                    f"{node.state}.next_state={node.next_state!r} not in expected_next {list(node.expected_next)}"
+                )
+        return errors
 
 
 @dataclass(frozen=True)
@@ -96,6 +122,7 @@ class WorkflowPlan:
                         "recognition": n.recognition,
                         "controller_id": n.controller_id,
                         "context_id": n.context_id,
+                        "expected_next": list(n.expected_next) if n.expected_next is not None else None,
                         "action": (
                             {
                                 "name": n.action.name,
@@ -153,6 +180,15 @@ class WorkflowPlan:
                             else None
                         ),
                     )
+                raw_expected = raw_node.get("expected_next")
+                if raw_expected is None:
+                    expected_next: tuple[str, ...] | None = None
+                elif isinstance(raw_expected, (list, tuple)):
+                    expected_next = tuple(
+                        str(s) for s in raw_expected if isinstance(s, str) and s
+                    )
+                else:
+                    expected_next = None
                 nodes.append(
                     StateNode(
                         state=state,
@@ -167,6 +203,7 @@ class WorkflowPlan:
                         ),
                         controller_id=(str(raw_node["controller_id"]) if raw_node.get("controller_id") is not None else None),
                         context_id=(str(raw_node["context_id"]) if raw_node.get("context_id") is not None else None),
+                        expected_next=expected_next,
                     )
                 )
 

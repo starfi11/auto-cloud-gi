@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 from typing import Any
 
-from src.adapters.perception import ElementResolver
+from src.adapters.perception import ElementResolver, FrameContext
 from src.adapters.runtime.ui_macro import build_ui_backend
 from src.domain.perception import PerceptionCandidate, PerceptionResult
 from src.domain.state_kernel import StateEstimate
@@ -65,9 +65,15 @@ class SpecStateEstimator(StateEstimatorPort):
 
     def __init__(self) -> None:
         backend_mode = os.getenv("UI_AUTOMATION_BACKEND", "auto")
-        self._resolver = ElementResolver(build_ui_backend(backend_mode))
+        self._backend = build_ui_backend(backend_mode)
+        self._resolver = ElementResolver(self._backend)
 
-    def estimate(self, context: RunContext, plan: WorkflowPlan) -> StateEstimate:
+    def estimate(
+        self,
+        context: RunContext,
+        plan: WorkflowPlan,
+        expected_states: list[str] | None = None,
+    ) -> StateEstimate:
         sp = plan.state_plan
         if sp is None:
             return StateEstimate(
@@ -77,15 +83,31 @@ class SpecStateEstimator(StateEstimatorPort):
                 uncertainty_reason="",
             )
 
+        # Single frame shared across all node evaluations this tick: one
+        # full screenshot, per-ROI crop cache, per-(ROI,ocr_key) OCR cache,
+        # per-element resolve cache.
+        frame = FrameContext(self._backend)
+
+        # Narrow-scan filter: evaluate only the expected_states set (plus
+        # current state implicitly — caller should include it if desired).
+        # None means broad scan.
+        if expected_states is None:
+            nodes_to_eval = sp.nodes
+            scan_mode = "broad"
+        else:
+            wanted = set(expected_states)
+            nodes_to_eval = [n for n in sp.nodes if n.state in wanted]
+            scan_mode = "narrow"
+
         evals: list[_NodeEval] = []
         candidates: list[PerceptionCandidate] = []
         all_evidence: list[str] = []
         has_any_recognition = False
 
-        for node in sp.nodes:
+        for node in nodes_to_eval:
             if node.recognition:
                 has_any_recognition = True
-            ev = self._evaluate_node(node)
+            ev = self._evaluate_node(node, frame)
             evals.append(ev)
             candidates.append(
                 PerceptionCandidate(
@@ -101,16 +123,23 @@ class SpecStateEstimator(StateEstimatorPort):
             return StateEstimate(
                 state=context.state or sp.initial_state,
                 confidence=1.0,
-                signals={"source": "context_fallback"},
+                signals={"source": "context_fallback", "scan_mode": scan_mode},
                 uncertainty_reason="",
             )
 
         best = max(evals, key=lambda e: e.confidence)
+        frame_stats = frame.stats()
         if best.confidence <= 0.01:
             return StateEstimate(
                 state=context.state or sp.initial_state,
                 confidence=0.3,
-                signals={"source": "fallback_context", "current": context.state},
+                signals={
+                    "source": "fallback_context",
+                    "current": context.state,
+                    "scan_mode": scan_mode,
+                    "nodes_evaluated": len(evals),
+                    "ocr_calls": frame_stats["ocr_calls"],
+                },
                 perception=PerceptionResult(
                     ok=False,
                     scene_id="state_recognition",
@@ -124,7 +153,13 @@ class SpecStateEstimator(StateEstimatorPort):
         return StateEstimate(
             state=best.state,
             confidence=best.confidence,
-            signals={"source": "spec_recognizer", "best_state": best.state},
+            signals={
+                "source": "spec_recognizer",
+                "best_state": best.state,
+                "scan_mode": scan_mode,
+                "nodes_evaluated": len(evals),
+                "ocr_calls": frame_stats["ocr_calls"],
+            },
             perception=PerceptionResult(
                 ok=True,
                 scene_id="state_recognition",
@@ -135,19 +170,19 @@ class SpecStateEstimator(StateEstimatorPort):
             uncertainty_reason="",
         )
 
-    def _evaluate_node(self, node: StateNode) -> _NodeEval:
+    def _evaluate_node(self, node: StateNode, frame: FrameContext) -> _NodeEval:
         try:
             rec = node.recognition or {}
             if not rec:
                 return _NodeEval(node.state, 0.0, 0, 0, [], "no_recognition")
 
             profile = str(rec.get("profile", "default")).strip() or "default"
-            timeout_seconds = float(rec.get("timeout_seconds", 0.03))
-            poll_seconds = float(rec.get("poll_seconds", 0.01))
+            # timeout_seconds/poll_seconds in recognition dicts are legacy —
+            # single-frame resolver has no wait semantics. Values are ignored.
 
             expr = rec.get("expr")
             if isinstance(expr, dict):
-                out = self._eval_expr(expr, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                out = self._eval_expr(expr, profile=profile, frame=frame)
                 return _NodeEval(
                     state=node.state,
                     confidence=max(0.0, min(1.0, out.score)),
@@ -168,12 +203,12 @@ class SpecStateEstimator(StateEstimatorPort):
             matched_any = 0
             evidence_refs: list[str] = []
             for eid in all_ids:
-                r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                r = self._match_present(eid, profile=profile, frame=frame)
                 if r.ok:
                     matched_all += 1
                     evidence_refs.extend(r.evidence_refs)
             for eid in any_ids:
-                r = self._match_present(eid, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                r = self._match_present(eid, profile=profile, frame=frame)
                 if r.ok:
                     matched_any += 1
                     evidence_refs.extend(r.evidence_refs)
@@ -200,8 +235,7 @@ class SpecStateEstimator(StateEstimatorPort):
         expr: dict[str, Any],
         *,
         profile: str,
-        timeout_seconds: float,
-        poll_seconds: float,
+        frame: FrameContext,
     ) -> _CondEval:
         op = str(expr.get("op", "")).strip().lower()
         if op in {"all", "any", "kof"}:
@@ -210,48 +244,49 @@ class SpecStateEstimator(StateEstimatorPort):
             if not items:
                 return _CondEval(False, 0.0, 0, 0, [], f"{op}_empty")
             evals = [
-                self._eval_clause(i, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+                self._eval_clause(i, profile=profile, frame=frame)
                 for i in items
             ]
             matched = sum(1 for e in evals if e.ok)
             total = len(evals)
             evidence = [x for e in evals for x in e.evidence_refs]
+            # Score = matched/total directly. The previous min(raw, 0.45)
+            # cap existed to suppress phantom partial matches under broad
+            # scan (e.g. `all[absent(a), absent(b), present(c)]` scoring 2/3
+            # in unrelated states because the absents are trivially true).
+            # Under narrow scan only legal successor states are evaluated,
+            # so a partial match is genuine signal and the cap no longer
+            # helps — it just creates a dead zone between 0.4 and 0.75.
+            raw = matched / max(1, total)
             if op == "all":
                 ok = matched == total
-                raw = matched / max(1, total)
-                score = raw if ok else min(raw, 0.45)
-                return _CondEval(ok, score, matched, total, evidence, f"all:{matched}/{total}")
+                return _CondEval(ok, raw, matched, total, evidence, f"all:{matched}/{total}")
             if op == "any":
                 ok = matched >= 1
-                raw = matched / max(1, total)
-                score = raw if ok else min(raw, 0.35)
-                return _CondEval(ok, score, matched, total, evidence, f"any:{matched}/{total}")
+                return _CondEval(ok, raw, matched, total, evidence, f"any:{matched}/{total}")
             k = int(expr.get("k", 1))
             ok = matched >= k
-            raw = matched / max(1, total)
-            score = raw if ok else min(raw, 0.45)
-            return _CondEval(ok, score, matched, total, evidence, f"kof:{matched}/{total},k={k}")
+            return _CondEval(ok, raw, matched, total, evidence, f"kof:{matched}/{total},k={k}")
 
         if op == "not":
             item = expr.get("item")
             if not isinstance(item, dict):
                 return _CondEval(False, 0.0, 0, 1, [], "not_missing_item")
-            inner = self._eval_clause(item, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            inner = self._eval_clause(item, profile=profile, frame=frame)
             return _CondEval(not inner.ok, 1.0 if not inner.ok else 0.0, 1 if not inner.ok else 0, 1, inner.evidence_refs, "not")
 
-        return self._eval_clause(expr, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+        return self._eval_clause(expr, profile=profile, frame=frame)
 
     def _eval_clause(
         self,
         clause: dict[str, Any],
         *,
         profile: str,
-        timeout_seconds: float,
-        poll_seconds: float,
+        frame: FrameContext,
     ) -> _CondEval:
         # nested expression
         if "op" in clause:
-            return self._eval_expr(clause, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            return self._eval_expr(clause, profile=profile, frame=frame)
 
         present = str(clause.get("present", "")).strip()
         absent = str(clause.get("absent", "")).strip()
@@ -264,19 +299,18 @@ class SpecStateEstimator(StateEstimatorPort):
             absent = cid
 
         if present:
-            r = self._match_present(present, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            r = self._match_present(present, profile=profile, frame=frame)
             return _CondEval(r.ok, 1.0 if r.ok else 0.0, 1 if r.ok else 0, 1, r.evidence_refs, f"present:{present}")
         if absent:
-            r = self._match_present(absent, profile=profile, timeout_seconds=timeout_seconds, poll_seconds=poll_seconds)
+            r = self._match_present(absent, profile=profile, frame=frame)
             ok = not r.ok
             return _CondEval(ok, 1.0 if ok else 0.0, 1 if ok else 0, 1, r.evidence_refs, f"absent:{absent}")
 
         return _CondEval(False, 0.0, 0, 1, [], "unknown_clause")
 
-    def _match_present(self, element_id: str, *, profile: str, timeout_seconds: float, poll_seconds: float):
-        return self._resolver.resolve(
+    def _match_present(self, element_id: str, *, profile: str, frame: FrameContext):
+        return self._resolver.resolve_once(
             element_id=element_id,
             profile=profile,
-            timeout_seconds=timeout_seconds,
-            poll_seconds=poll_seconds,
+            frame=frame,
         )

@@ -28,7 +28,11 @@ class TablePolicyEngine(PolicyEnginePort):
         # Recognizer-driven transition is allowed only in observation states (no bound action).
         # Action states must execute their action first, otherwise we may skip critical side effects.
         can_sync_by_observation = current_node.action is None
-        observation_sync_threshold = 0.75
+        # Narrow-scan under expected_next removes cross-state phantoms, so we
+        # can trust lower-confidence signals. Previously 0.75 was chosen to
+        # guard against the all/kof partial-match 0.45 cap interacting with
+        # broad scan noise; both are gone now.
+        observation_sync_threshold = 0.6
         if can_sync_by_observation and observed_state != current_state and observed_state:
             observed_node = state_plan.node_for(observed_state)
             if observed_state in state_plan.terminal_states and estimate.confidence >= observation_sync_threshold:

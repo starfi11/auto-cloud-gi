@@ -5,6 +5,7 @@ from time import monotonic, sleep
 from typing import Any, Protocol
 
 from src.adapters.perception.element_registry import ElementRegistry
+from src.adapters.perception.frame_context import FrameContext
 from src.adapters.vision import TemplateStore, build_ocr_engine
 from src.domain.ui_element import ElementMatchResult, MatcherSpec, UiElement
 from src.ports.element_resolver_port import ElementResolverPort
@@ -68,11 +69,22 @@ class ElementResolver(ElementResolverPort):
 
         fail_count = 0
         t0 = monotonic()
+        last_phase = "roi"
         while True:
             phase = self._phase_for_fail_count(fail_count, element)
+            last_phase = phase
+            # Fresh frame per iteration: per-iteration cache, but cross-iteration
+            # must re-capture since we are explicitly waiting for the screen to change.
+            frame = FrameContext(self._backend)
             region = self._region_for_phase(element, phase)
             for matcher in self._ordered_matchers(element.matchers):
-                found = self._try_match(matcher=matcher, element=element, profile=profile, region=region)
+                found = self._try_match(
+                    matcher=matcher,
+                    element=element,
+                    profile=profile,
+                    region=region,
+                    frame=frame,
+                )
                 if found.ok:
                     return found
             fail_count += 1
@@ -81,12 +93,56 @@ class ElementResolver(ElementResolverPort):
                 return ElementMatchResult(
                     ok=False,
                     element_id=element.element_id,
-                    detail=f"element_timeout:{phase}",
+                    detail=f"element_timeout:{last_phase}",
                 )
             remaining = max(0.0, timeout - elapsed)
             sleep_for = min(max(0.001, poll), remaining)
             if sleep_for > 0:
                 sleep(sleep_for)
+
+    def resolve_once(
+        self,
+        *,
+        element_id: str,
+        profile: str = "default",
+        frame: FrameContext,
+    ) -> ElementMatchResult:
+        """Single-frame resolution. Shares capture/OCR cache via FrameContext.
+
+        Tries roi -> expand -> global in sequence within the one frame. No
+        sleeping, no retries — tick loop owns waiting semantics.
+        """
+        element = self._registry.get(element_id)
+        if element is None:
+            return ElementMatchResult(ok=False, element_id=element_id, detail="element_not_found")
+
+        cache_key = (element_id, profile)
+        cached = frame.cached_element(element_id, profile)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+        last_detail = "element_miss"
+        for phase in ("roi", "expand", "global"):
+            region = self._region_for_phase(element, phase)
+            for matcher in self._ordered_matchers(element.matchers):
+                found = self._try_match(
+                    matcher=matcher,
+                    element=element,
+                    profile=profile,
+                    region=region,
+                    frame=frame,
+                )
+                if found.ok:
+                    frame.cache_element(*cache_key, found)
+                    return found
+                last_detail = found.detail
+        miss = ElementMatchResult(
+            ok=False,
+            element_id=element.element_id,
+            detail=f"element_miss:{last_detail}",
+        )
+        frame.cache_element(*cache_key, miss)
+        return miss
 
     def _phase_for_fail_count(self, fail_count: int, element: UiElement) -> str:
         if fail_count < max(1, int(element.policy.roi_fail_to_expand)):
@@ -137,9 +193,10 @@ class ElementResolver(ElementResolverPort):
         element: UiElement,
         profile: str,
         region: tuple[int, int, int, int] | None,
+        frame: FrameContext,
     ) -> ElementMatchResult:
         if matcher.kind == "text_ocr":
-            return self._match_text(element, matcher, region)
+            return self._match_text(element, matcher, region, frame)
         if matcher.kind == "template":
             return self._match_template(element, matcher, profile, region)
         return ElementMatchResult(ok=False, element_id=element.element_id, detail=f"unsupported_matcher:{matcher.kind}")
@@ -189,12 +246,12 @@ class ElementResolver(ElementResolverPort):
         element: UiElement,
         matcher: MatcherSpec,
         region: tuple[int, int, int, int] | None,
+        frame: FrameContext,
     ) -> ElementMatchResult:
         if not matcher.text_any:
             return ElementMatchResult(ok=False, element_id=element.element_id, detail="text_terms_missing")
         try:
-            image = self._backend.screenshot(region=region)
-            text = self._ocr.read_text(image)
+            text = frame.get_ocr_text(region, self._ocr)
         except Exception as exc:  # noqa: BLE001
             return ElementMatchResult(
                 ok=False,

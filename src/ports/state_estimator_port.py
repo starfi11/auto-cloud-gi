@@ -8,5 +8,10 @@ from src.kernel.context_store import RunContext
 
 
 class StateEstimatorPort(Protocol):
-    def estimate(self, context: RunContext, plan: WorkflowPlan) -> StateEstimate:
+    def estimate(
+        self,
+        context: RunContext,
+        plan: WorkflowPlan,
+        expected_states: list[str] | None = None,
+    ) -> StateEstimate:
         ...
