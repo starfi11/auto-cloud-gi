@@ -462,6 +462,13 @@ class Orchestrator(TriggerPort):
     def get_run(self, run_id: str) -> RunRecord | None:
         return self._records.get(run_id)
 
+    def list_runs(self) -> list[RunRecord]:
+        return list(self._records.values())
+
+    def active_run_id(self) -> str | None:
+        with self._active_run_lock:
+            return self._active_run_id
+
     def interrupt_run(self, run_id: str, reason: str = "manual_interrupt") -> bool:
         ok = self._signals.interrupt(run_id, reason)
         if ok:
