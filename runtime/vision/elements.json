@@ -78,32 +78,25 @@
       "matchers": [{"kind": "text_ocr", "text_any": ["点击领取今日空月祝福奖励", "空月祝福奖励"]}]
     },
     {
-      "id": "cloud_in_game_num_1",
+      "id": "cloud_home_genshin_logo",
       "profile": "genshin_cloud",
-      "roi": [1380, 240, 120, 260],
+      "roi": [0, 0, 520, 340],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["1"]}]
+      "matchers": [{"kind": "template", "template_key": "cloud_home_genshin_logo", "confidence": 0.85}]
     },
     {
-      "id": "cloud_in_game_num_2",
+      "id": "cloud_door_icon",
       "profile": "genshin_cloud",
-      "roi": [1380, 240, 120, 260],
+      "roi": [1180, 680, 420, 220],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["2"]}]
+      "matchers": [{"kind": "template", "template_key": "cloud_door_icon", "confidence": 0.85}]
     },
     {
-      "id": "cloud_in_game_num_3",
+      "id": "cloud_ingame_bag_icon",
       "profile": "genshin_cloud",
-      "roi": [1380, 240, 120, 260],
+      "roi": [1380, 0, 220, 200],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["3"]}]
-    },
-    {
-      "id": "cloud_in_game_num_4",
-      "profile": "genshin_cloud",
-      "roi": [1380, 240, 120, 260],
-      "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["4"]}]
+      "matchers": [{"kind": "template", "template_key": "cloud_ingame_bag_icon", "confidence": 0.85}]
     },
     {
       "id": "btgi_update_popup",
