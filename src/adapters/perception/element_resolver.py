@@ -51,6 +51,13 @@ class ElementResolver(ElementResolverPort):
         )
         self._template_store = TemplateStore(template_env)
         self._ocr = ocr_engine or build_ocr_engine()
+        # Optional fractional crop applied to any element that didn't declare
+        # an ROI. Format: "x,y,w,h" as fractions of backend.size(), e.g.
+        # "0,0.5,1,0.5" for the bottom half. Unset means full screen
+        # (existing behavior). Saves a full-frame OCR per no-ROI element.
+        self._default_global_crop_frac = _parse_global_crop_frac(
+            os.getenv("ACGI_DEFAULT_GLOBAL_CROP_FRAC", "")
+        )
 
     def resolve(
         self,
@@ -172,12 +179,30 @@ class ElementResolver(ElementResolverPort):
         return "global"
 
     def _region_for_phase(self, element: UiElement, phase: str) -> tuple[int, int, int, int] | None:
-        if element.roi is None or phase == "global":
-            return None
+        if phase == "global":
+            return self._default_global_region()
+        if element.roi is None:
+            return self._default_global_region()
         scaled = self._scale_region(element.roi, element.base_size)
         if phase == "roi":
             return scaled
         return self._expand_region(scaled, element.policy.roi_expand_factor)
+
+    def _default_global_region(self) -> tuple[int, int, int, int] | None:
+        frac = self._default_global_crop_frac
+        if frac is None:
+            return None
+        fx, fy, fw, fh = frac
+        sw, sh = self._backend.size()
+        x = max(0, int(fx * sw))
+        y = max(0, int(fy * sh))
+        w = max(1, int(fw * sw))
+        h = max(1, int(fh * sh))
+        if x + w > sw:
+            w = sw - x
+        if y + h > sh:
+            h = sh - y
+        return x, y, max(1, w), max(1, h)
 
     def _scale_region(self, region: tuple[int, int, int, int], base_size: tuple[int, int]) -> tuple[int, int, int, int]:
         x, y, w, h = region
@@ -315,3 +340,25 @@ class ElementResolver(ElementResolverPort):
         if len(cleaned) <= limit:
             return cleaned
         return cleaned[:limit] + "..."
+
+
+def _parse_global_crop_frac(raw: str) -> tuple[float, float, float, float] | None:
+    s = (raw or "").strip()
+    if not s:
+        return None
+    try:
+        parts = [float(p) for p in s.split(",")]
+    except ValueError:
+        return None
+    if len(parts) != 4:
+        return None
+    x, y, w, h = parts
+    if w <= 0.0 or h <= 0.0:
+        return None
+    x = max(0.0, min(1.0, x))
+    y = max(0.0, min(1.0, y))
+    w = max(0.0, min(1.0 - x, w))
+    h = max(0.0, min(1.0 - y, h))
+    if w <= 0.0 or h <= 0.0:
+        return None
+    return x, y, w, h
