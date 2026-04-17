@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>auto-cloud-gi control</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #151822;
+      --panel-2: #1c2030;
+      --border: #262b3c;
+      --text: #d8dce8;
+      --muted: #7c85a0;
+      --accent: #7aa2f7;
+      --ok: #9ece6a;
+      --warn: #e0af68;
+      --err: #f7768e;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font: 13px/1.5 -apple-system, "Segoe UI", Roboto, "Noto Sans SC", sans-serif;
+    }
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 14px; font-weight: 600; margin: 0; color: var(--text); }
+    header .muted { color: var(--muted); font-family: var(--mono); }
+    header input {
+      flex: 0 0 260px; padding: 6px 8px;
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px; font-family: var(--mono);
+    }
+    header button {
+      padding: 6px 10px; background: var(--accent); color: #0b0d12;
+      border: 0; border-radius: 4px; cursor: pointer; font-weight: 600;
+    }
+    header button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    header button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.ok { background: var(--ok); }
+    .dot.err { background: var(--err); }
+    .dot.warn { background: var(--warn); }
+    main { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 48px); }
+    .panel { background: var(--panel); border-right: 1px solid var(--border); overflow: auto; }
+    .panel h2 { margin: 0; padding: 10px 14px; font-size: 12px; text-transform: uppercase;
+                color: var(--muted); letter-spacing: 0.08em; border-bottom: 1px solid var(--border); }
+    .run-item {
+      padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+    }
+    .run-item:hover { background: var(--panel-2); }
+    .run-item.active { background: var(--panel-2); border-left: 3px solid var(--accent); padding-left: 11px; }
+    .run-item .id { font-family: var(--mono); font-size: 11px; color: var(--muted); word-break: break-all; }
+    .run-item .meta { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+    .tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px;
+      font-size: 11px; font-family: var(--mono); background: var(--panel-2);
+    }
+    .tag.running { background: #2a3d5c; color: var(--accent); }
+    .tag.finished { background: #2b3f2a; color: var(--ok); }
+    .tag.failed, .tag.interrupted, .tag.risk_stopped { background: #4a2630; color: var(--err); }
+    .tag.accepted { background: #3a3322; color: var(--warn); }
+    main section { display: flex; flex-direction: column; overflow: hidden; }
+    .toolbar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+    }
+    .toolbar select, .toolbar input, .toolbar button {
+      background: var(--panel-2); color: var(--text);
+      border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; font-family: var(--mono);
+    }
+    .toolbar button { cursor: pointer; }
+    .toolbar button:hover { background: var(--border); }
+    .toolbar .spacer { flex: 1; }
+    .events {
+      flex: 1; overflow: auto; padding: 0; font-family: var(--mono); font-size: 12px;
+    }
+    .evt {
+      display: grid; grid-template-columns: 50px 90px 180px 1fr;
+      gap: 10px; padding: 4px 14px; border-bottom: 1px solid #1a1d29;
+    }
+    .evt:hover { background: var(--panel-2); }
+    .evt .seq { color: var(--muted); text-align: right; }
+    .evt .lvl { font-weight: 600; }
+    .evt .lvl.INFO { color: var(--accent); }
+    .evt .lvl.WARN, .evt .lvl.WARNING { color: var(--warn); }
+    .evt .lvl.ERROR, .evt .lvl.FATAL { color: var(--err); }
+    .evt .type { color: #bb9af7; }
+    .evt .payload { color: var(--text); white-space: pre-wrap; word-break: break-all; }
+    .frames { padding: 10px 14px; border-top: 1px solid var(--border); background: var(--panel);
+              max-height: 240px; overflow: auto; }
+    .frames h3 { margin: 0 0 8px 0; font-size: 12px; color: var(--muted); text-transform: uppercase;
+                 letter-spacing: 0.08em; display: flex; align-items: center; gap: 8px; }
+    .frame-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+    .frame-grid a { display: block; }
+    .frame-grid img { height: 80px; border: 1px solid var(--border); border-radius: 3px; display: block; }
+    .frame-grid .name { font-size: 10px; color: var(--muted); font-family: var(--mono); text-align: center; margin-top: 2px; }
+    .empty { padding: 24px; text-align: center; color: var(--muted); }
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px;
+      font-family: var(--mono); font-size: 12px; opacity: 0; transition: opacity 0.3s;
+      max-width: 420px;
+    }
+    .toast.show { opacity: 1; }
+    .toast.err { border-color: var(--err); color: var(--err); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>auto-cloud-gi</h1>
+    <span id="health-dot" class="dot err" title="unknown"></span>
+    <span id="health-text" class="muted">checking…</span>
+    <span class="spacer" style="flex:1"></span>
+    <input id="token-input" type="password" placeholder="X-API-Token (saved to localStorage)" />
+    <button id="save-token">save</button>
+    <button id="refresh-btn" class="secondary">refresh</button>
+  </header>
+
+  <main>
+    <aside class="panel">
+      <h2>runs <span id="run-count" class="muted" style="text-transform:none"></span></h2>
+      <div id="run-list"></div>
+    </aside>
+
+    <section>
+      <div class="toolbar">
+        <span id="current-run" class="muted">no run selected</span>
+        <span class="spacer" style="flex:1"></span>
+        <label>stream
+          <select id="stream-select">
+            <option value="events">events</option>
+            <option value="state_transitions">state_transitions</option>
+            <option value="actions">actions</option>
+            <option value="replay_trace">replay_trace</option>
+          </select>
+        </label>
+        <label>auto
+          <input id="auto-toggle" type="checkbox" checked />
+        </label>
+        <button id="interrupt-btn">interrupt</button>
+        <button id="risk-btn">risk-stop</button>
+      </div>
+
+      <div id="events" class="events"></div>
+
+      <div class="frames">
+        <h3>frames <span id="frame-count" class="muted" style="text-transform:none"></span></h3>
+        <div id="frame-grid" class="frame-grid"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+  (() => {
+    const state = {
+      token: localStorage.getItem('acgi-token') || '',
+      runs: [],
+      selectedRun: null,
+      eventsSince: 0,
+      events: [],
+      stream: 'events',
+      pollTimer: null,
+      runsTimer: null,
+      maxEvents: 1000,
+    };
+
+    const qs = (sel) => document.querySelector(sel);
+    const tokenInput = qs('#token-input');
+    const healthDot = qs('#health-dot');
+    const healthText = qs('#health-text');
+    const runList = qs('#run-list');
+    const runCount = qs('#run-count');
+    const eventsEl = qs('#events');
+    const currentRun = qs('#current-run');
+    const streamSelect = qs('#stream-select');
+    const autoToggle = qs('#auto-toggle');
+    const frameGrid = qs('#frame-grid');
+    const frameCount = qs('#frame-count');
+    const toast = qs('#toast');
+
+    tokenInput.value = state.token;
+
+    function showToast(msg, isErr = false) {
+      toast.textContent = msg;
+      toast.className = 'toast show' + (isErr ? ' err' : '');
+      setTimeout(() => toast.className = 'toast', 2500);
+    }
+
+    async function api(method, path, body) {
+      const headers = { 'Accept': 'application/json' };
+      if (state.token) headers['X-API-Token'] = state.token;
+      if (body) headers['Content-Type'] = 'application/json; charset=utf-8';
+      let resp;
+      try {
+        resp = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : null });
+      } catch (e) {
+        throw new Error('network: ' + e.message);
+      }
+      const text = await resp.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (_) { data = { _raw: text }; }
+      if (!resp.ok) {
+        const err = new Error((data && (data.error || data._raw)) || `http ${resp.status}`);
+        err.status = resp.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
+    }
+
+    async function refreshHealth() {
+      try {
+        const h = await api('GET', '/api/v1/health');
+        healthDot.className = 'dot ok';
+        healthText.textContent = `auth=${h.auth_enabled ? 'on' : 'off'} active=${h.active_run_id || '-'}`;
+        healthText.title = JSON.stringify(h, null, 2);
+      } catch (e) {
+        healthDot.className = 'dot err';
+        healthText.textContent = (e.status === 401 || e.status === 403) ? 'unauthorized' : 'offline';
+      }
+    }
+
+    async function refreshRuns() {
+      try {
+        const data = await api('GET', '/api/v1/runs');
+        state.runs = data.runs || [];
+        runCount.textContent = `(${state.runs.length})`;
+        renderRuns(data.active_run_id);
+      } catch (e) {
+        runList.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderRuns(activeId) {
+      if (!state.runs.length) {
+        runList.innerHTML = '<div class="empty">no runs yet</div>';
+        return;
+      }
+      runList.innerHTML = state.runs.map(r => `
+        <div class="run-item ${state.selectedRun === r.run_id ? 'active' : ''}" data-id="${r.run_id}">
+          <div class="id">${escapeHtml(r.run_id)}${r.run_id === activeId ? ' •' : ''}</div>
+          <div class="meta">
+            <span class="tag ${r.status}">${r.status}</span>
+            <span class="muted">${r.scenario || ''}</span>
+          </div>
+        </div>
+      `).join('');
+      runList.querySelectorAll('.run-item').forEach(el => {
+        el.addEventListener('click', () => selectRun(el.dataset.id));
+      });
+    }
+
+    async function selectRun(runId) {
+      state.selectedRun = runId;
+      state.eventsSince = 0;
+      state.events = [];
+      currentRun.textContent = runId;
+      eventsEl.innerHTML = '<div class="empty">loading…</div>';
+      frameGrid.innerHTML = '';
+      frameCount.textContent = '';
+      renderRuns();
+      await pollEvents();
+      await refreshFrames();
+    }
+
+    async function pollEvents() {
+      if (!state.selectedRun) return;
+      try {
+        const data = await api(
+          'GET',
+          `/api/v1/runs/${encodeURIComponent(state.selectedRun)}/events?since=${state.eventsSince}&stream=${state.stream}&limit=300`
+        );
+        for (const evt of data.events || []) {
+          state.events.push(evt);
+        }
+        state.eventsSince = data.next_since || state.eventsSince;
+        if (state.events.length > state.maxEvents) {
+          state.events = state.events.slice(-state.maxEvents);
+        }
+        renderEvents();
+      } catch (e) {
+        eventsEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    function renderEvents() {
+      if (!state.events.length) {
+        eventsEl.innerHTML = '<div class="empty">no events</div>';
+        return;
+      }
+      const atBottom = eventsEl.scrollTop + eventsEl.clientHeight >= eventsEl.scrollHeight - 20;
+      eventsEl.innerHTML = state.events.map(renderEvent).join('');
+      if (atBottom) eventsEl.scrollTop = eventsEl.scrollHeight;
+    }
+
+    function renderEvent(evt) {
+      const seq = evt.seq != null ? evt.seq : '-';
+      const lvl = evt.level || 'INFO';
+      const type = evt.event_type || evt.type || evt.action || '';
+      const ts = (evt.ts || '').slice(11, 19);
+      const payload = evt.payload || evt;
+      let payloadStr;
+      try { payloadStr = JSON.stringify(payload); } catch (_) { payloadStr = String(payload); }
+      return `<div class="evt">
+        <span class="seq">${seq}</span>
+        <span class="lvl ${lvl}">${lvl}</span>
+        <span class="type">${escapeHtml(ts)} ${escapeHtml(type)}</span>
+        <span class="payload">${escapeHtml(payloadStr)}</span>
+      </div>`;
+    }
+
+    async function refreshFrames() {
+      if (!state.selectedRun) return;
+      try {
+        const data = await api('GET', `/api/v1/runs/${encodeURIComponent(state.selectedRun)}/frames`);
+        const frames = data.frames || [];
+        frameCount.textContent = `(${frames.length})`;
+        if (!frames.length) {
+          frameGrid.innerHTML = '<div class="muted" style="font-size:11px">no frames</div>';
+          return;
+        }
+        frameGrid.innerHTML = frames.map(name => {
+          const url = `/api/v1/runs/${encodeURIComponent(state.selectedRun)}/frames/${encodeURIComponent(name)}`;
+          return `<a href="${url}" target="_blank">
+            <img src="${url}" alt="${escapeHtml(name)}" loading="lazy" />
+            <div class="name">${escapeHtml(name)}</div>
+          </a>`;
+        }).join('');
+      } catch (e) {
+        frameGrid.innerHTML = `<div class="muted">frames: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function sendSignal(kind) {
+      if (!state.selectedRun) { showToast('no run selected', true); return; }
+      const reason = prompt(`reason for ${kind}:`, kind === 'interrupt' ? 'manual' : 'risk') || kind;
+      try {
+        await api('POST', `/api/v1/runs/${encodeURIComponent(state.selectedRun)}/${kind}`, { reason });
+        showToast(`${kind} sent`);
+      } catch (e) {
+        showToast(`${kind} failed: ${e.message}`, true);
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    qs('#save-token').addEventListener('click', () => {
+      state.token = tokenInput.value.trim();
+      localStorage.setItem('acgi-token', state.token);
+      showToast('token saved');
+      refreshHealth(); refreshRuns();
+    });
+    qs('#refresh-btn').addEventListener('click', () => { refreshHealth(); refreshRuns(); if (state.selectedRun) { pollEvents(); refreshFrames(); } });
+    qs('#interrupt-btn').addEventListener('click', () => sendSignal('interrupt'));
+    qs('#risk-btn').addEventListener('click', () => sendSignal('risk'));
+    streamSelect.addEventListener('change', () => {
+      state.stream = streamSelect.value;
+      state.eventsSince = 0; state.events = [];
+      if (state.selectedRun) pollEvents();
+    });
+
+    refreshHealth(); refreshRuns();
+    setInterval(() => { if (autoToggle.checked) refreshHealth(); }, 5000);
+    setInterval(() => { if (autoToggle.checked) refreshRuns(); }, 3000);
+    setInterval(() => { if (autoToggle.checked && state.selectedRun) pollEvents(); }, 1500);
+    setInterval(() => { if (autoToggle.checked && state.selectedRun) refreshFrames(); }, 5000);
+  })();
+  </script>
+</body>
+</html>
