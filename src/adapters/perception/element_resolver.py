@@ -121,7 +121,9 @@ class ElementResolver(ElementResolverPort):
         if cached is not None:
             return cached  # type: ignore[return-value]
 
-        last_detail = "element_miss"
+        last_detail = "no_matcher"
+        last_ocr_text = ""
+        last_region: tuple[int, int, int, int] | None = None
         # ROI contract: if the element declares an ROI, "this is where to look".
         # Fall through roi -> expand only; do NOT silently escalate to a full
         # screen scan, which defeats the ROI and causes phantom matches on
@@ -143,11 +145,21 @@ class ElementResolver(ElementResolverPort):
                 if found.ok:
                     frame.cache_element(*cache_key, found)
                     return found
-                last_detail = found.detail
+                # Strip any element_miss: prefix before remembering this
+                # iteration's detail, so a later miss doesn't recursively
+                # wrap into element_miss:element_miss:... in the log.
+                inner = found.detail or ""
+                while inner.startswith("element_miss:"):
+                    inner = inner[len("element_miss:") :]
+                last_detail = inner or "no_matcher"
+                last_ocr_text = found.ocr_text or last_ocr_text
+                last_region = found.region_scanned or last_region
         miss = ElementMatchResult(
             ok=False,
             element_id=element.element_id,
             detail=f"element_miss:{last_detail}",
+            ocr_text=last_ocr_text,
+            region_scanned=last_region,
         )
         frame.cache_element(*cache_key, miss)
         return miss
