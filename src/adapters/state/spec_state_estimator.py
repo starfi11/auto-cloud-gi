@@ -155,7 +155,12 @@ class SpecStateEstimator(StateEstimatorPort):
             )
             all_evidence.extend(ev.evidence_refs)
 
-        frame_stats = frame.stats()
+        # Nest all per-tick frame diagnostics under signals["frame"] so future
+        # additions (template_calls etc.) don't balloon the top-level signals
+        # blob. Consumers today only serialize signals as an opaque JSONL blob,
+        # so this is a pure schema reshape.
+        frame_block: dict[str, Any] = dict(frame.stats())
+        frame_block["frame_path"] = None
 
         if not evals:
             # Narrow scan filtered every plan node out. Either expected_states
@@ -171,10 +176,7 @@ class SpecStateEstimator(StateEstimatorPort):
                     "scan_mode": scan_mode,
                     "expected_states": list(expected_states) if expected_states else None,
                     "nodes_evaluated": 0,
-                    "ocr_calls": frame_stats["ocr_calls"],
-                    "capture_ms": frame_stats["capture_ms"],
-                    "ocr_ms": frame_stats["ocr_ms"],
-                    "frame_path": None,
+                    "frame": frame_block,
                 },
                 uncertainty_reason="narrow_scan_empty",
             )
@@ -190,18 +192,15 @@ class SpecStateEstimator(StateEstimatorPort):
                     "source": "context_fallback_no_recognition",
                     "scan_mode": scan_mode,
                     "nodes_evaluated": len(evals),
-                    "ocr_calls": frame_stats["ocr_calls"],
-                    "capture_ms": frame_stats["capture_ms"],
-                    "ocr_ms": frame_stats["ocr_ms"],
+                    "frame": frame_block,
                 },
                 uncertainty_reason="",
             )
 
         best = max(evals, key=lambda e: e.confidence)
-        frame_path: str | None = None
         if os.getenv("ACGI_SAVE_FRAMES", "").strip() in {"1", "true", "True"}:
             out_dir = os.getenv("ACGI_FRAMES_DIR", "./runtime/frames").strip() or "./runtime/frames"
-            frame_path = frame.save_full_frame(out_dir, tag=best.state)
+            frame_block["frame_path"] = frame.save_full_frame(out_dir, tag=best.state)
         # Dead zone aligned with TablePolicyEngine's low-confidence threshold
         # (0.4). Below that, no candidate is strong enough to trust its label,
         # so fall back to context.state while passing the raw confidence
@@ -219,10 +218,7 @@ class SpecStateEstimator(StateEstimatorPort):
                     "scan_mode": scan_mode,
                     "expected_states": list(expected_states) if expected_states else None,
                     "nodes_evaluated": len(evals),
-                    "ocr_calls": frame_stats["ocr_calls"],
-                    "capture_ms": frame_stats["capture_ms"],
-                    "ocr_ms": frame_stats["ocr_ms"],
-                    "frame_path": frame_path,
+                    "frame": frame_block,
                 },
                 perception=PerceptionResult(
                     ok=False,
@@ -243,10 +239,7 @@ class SpecStateEstimator(StateEstimatorPort):
                 "scan_mode": scan_mode,
                 "expected_states": list(expected_states) if expected_states else None,
                 "nodes_evaluated": len(evals),
-                "ocr_calls": frame_stats["ocr_calls"],
-                "capture_ms": frame_stats["capture_ms"],
-                "ocr_ms": frame_stats["ocr_ms"],
-                "frame_path": frame_path,
+                "frame": frame_block,
             },
             perception=PerceptionResult(
                 ok=True,
