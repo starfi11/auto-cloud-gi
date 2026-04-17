@@ -93,6 +93,22 @@ class WorkflowPlan:
     state_plan: StatePlan | None = None
     steps: list[WorkflowStep] = field(default_factory=list)
 
+    def action_steps_from_state_plan(self) -> list[WorkflowStep]:
+        """Derive WorkflowSteps from the state plan's action-bearing nodes.
+
+        Lets consumers that previously read ``plan.steps`` as "the list of
+        executable steps" keep working even when a state_driven profile
+        stops hand-maintaining a parallel ``steps`` list. Preserves state
+        node order. Returns [] when there's no state plan.
+        """
+        if self.state_plan is None:
+            return []
+        return [
+            node.action.to_step()
+            for node in self.state_plan.nodes
+            if node.action is not None
+        ]
+
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "profile": self.profile,
