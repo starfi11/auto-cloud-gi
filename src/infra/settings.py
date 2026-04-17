@@ -33,6 +33,8 @@ class Settings:
     app_env: str
     control_api_host: str
     control_api_port: int
+    control_api_token: str
+    control_api_frontend_dir: str
     run_concurrency_mode: str
     run_max_queue_size: int
     automation_default_profile: str
@@ -52,6 +54,8 @@ class Settings:
             app_env=os.getenv("APP_ENV", "dev"),
             control_api_host=os.getenv("CONTROL_API_HOST", "0.0.0.0"),
             control_api_port=int(os.getenv("CONTROL_API_PORT", "8788")),
+            control_api_token=os.getenv("CONTROL_API_TOKEN", "").strip(),
+            control_api_frontend_dir=os.getenv("CONTROL_API_FRONTEND_DIR", "").strip(),
             run_concurrency_mode=os.getenv("RUN_CONCURRENCY_MODE", "single"),
             run_max_queue_size=int(os.getenv("RUN_MAX_QUEUE_SIZE", "10")),
             automation_default_profile=os.getenv("AUTOMATION_DEFAULT_PROFILE", "genshin_cloud_bettergi"),

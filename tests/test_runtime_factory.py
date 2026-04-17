@@ -10,6 +10,8 @@ class RuntimeFactoryTest(unittest.TestCase):
             app_env="test",
             control_api_host="127.0.0.1",
             control_api_port=8788,
+            control_api_token="",
+            control_api_frontend_dir="",
             run_concurrency_mode="single",
             run_max_queue_size=10,
             automation_default_profile="genshin_cloud_bettergi",
