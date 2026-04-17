@@ -155,27 +155,67 @@ class SpecStateEstimator(StateEstimatorPort):
             )
             all_evidence.extend(ev.evidence_refs)
 
-        if not evals or not has_any_recognition:
-            return StateEstimate(
-                state=context.state or sp.initial_state,
-                confidence=1.0,
-                signals={"source": "context_fallback", "scan_mode": scan_mode},
-                uncertainty_reason="",
-            )
-
-        best = max(evals, key=lambda e: e.confidence)
         frame_stats = frame.stats()
-        frame_path: str | None = None
-        if os.getenv("ACGI_SAVE_FRAMES", "").strip() in {"1", "true", "True"}:
-            out_dir = os.getenv("ACGI_FRAMES_DIR", "./runtime/frames").strip() or "./runtime/frames"
-            frame_path = frame.save_full_frame(out_dir, tag=best.state)
-        if best.confidence <= 0.01:
+
+        if not evals:
+            # Narrow scan filtered every plan node out. Either expected_states
+            # references unknown states or context.state drifted to a node
+            # that's no longer in the plan. We can't observe anything, so
+            # drop to the policy's low-conf threshold to let the executor's
+            # narrow-scan broad fallback kick in.
             return StateEstimate(
                 state=context.state or sp.initial_state,
                 confidence=0.3,
                 signals={
+                    "source": "narrow_scan_empty",
+                    "scan_mode": scan_mode,
+                    "expected_states": list(expected_states) if expected_states else None,
+                    "nodes_evaluated": 0,
+                    "ocr_calls": frame_stats["ocr_calls"],
+                    "capture_ms": frame_stats["capture_ms"],
+                    "ocr_ms": frame_stats["ocr_ms"],
+                    "frame_path": None,
+                },
+                uncertainty_reason="narrow_scan_empty",
+            )
+
+        if not has_any_recognition:
+            # Waypoint-only neighborhood (e.g. S_BOOTSTRAP → S_DISCOVER_CLOUD
+            # with neither node declaring recognition). Nothing to observe,
+            # so trust context.state and let the policy advance via stable_ticks.
+            return StateEstimate(
+                state=context.state or sp.initial_state,
+                confidence=1.0,
+                signals={
+                    "source": "context_fallback_no_recognition",
+                    "scan_mode": scan_mode,
+                    "nodes_evaluated": len(evals),
+                    "ocr_calls": frame_stats["ocr_calls"],
+                    "capture_ms": frame_stats["capture_ms"],
+                    "ocr_ms": frame_stats["ocr_ms"],
+                },
+                uncertainty_reason="",
+            )
+
+        best = max(evals, key=lambda e: e.confidence)
+        frame_path: str | None = None
+        if os.getenv("ACGI_SAVE_FRAMES", "").strip() in {"1", "true", "True"}:
+            out_dir = os.getenv("ACGI_FRAMES_DIR", "./runtime/frames").strip() or "./runtime/frames"
+            frame_path = frame.save_full_frame(out_dir, tag=best.state)
+        # Dead zone aligned with TablePolicyEngine's low-confidence threshold
+        # (0.4). Below that, no candidate is strong enough to trust its label,
+        # so fall back to context.state while passing the raw confidence
+        # through — the policy decides wait/force/fail. Previously 0.01 was
+        # effectively never hit and let 0.25-0.5 phantom matches label as
+        # fact, which tripped 0.6 observation_sync only by coincidence.
+        if best.confidence < 0.4:
+            return StateEstimate(
+                state=context.state or sp.initial_state,
+                confidence=best.confidence,
+                signals={
                     "source": "fallback_context",
                     "current": context.state,
+                    "best_candidate": best.state,
                     "scan_mode": scan_mode,
                     "expected_states": list(expected_states) if expected_states else None,
                     "nodes_evaluated": len(evals),
