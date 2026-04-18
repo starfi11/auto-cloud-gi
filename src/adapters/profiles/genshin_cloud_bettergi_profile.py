@@ -256,11 +256,10 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     recognition={
                         "profile": "genshin_cloud",
                         "expr": {
-                            "op": "all",
+                            "op": "any",
                             "items": [
-                                {"absent": "cloud_queue_exit_text"},
-                                {"absent": "cloud_queue_eta_text"},
                                 {"present": "cloud_door_enter"},
+                                {"present": "cloud_door_icon"},
                             ],
                         },
                         "timeout_seconds": 0.20,
