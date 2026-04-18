@@ -294,7 +294,7 @@ class RunExecutor:
         sp = plan.state_plan
         if sp is None:
             return None
-        node = sp.node_for(current)
+        node = sp.node_for(current, context.blackboard)
         if node is None or node.expected_next is None:
             return None
         out = [current]
@@ -320,7 +320,7 @@ class RunExecutor:
         required_observed_ticks = max(1, int(step.params.get("transition_observed_ticks", 2)))
         auto_downgraded_observed = False
         if require_observed:
-            target_node = plan.state_plan.node_for(target_state) if plan.state_plan is not None else None
+            target_node = plan.state_plan.node_for(target_state, context.blackboard) if plan.state_plan is not None else None
             has_recognition = bool(target_node and target_node.recognition)
             if not has_recognition:
                 require_observed = False

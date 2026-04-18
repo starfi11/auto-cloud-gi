@@ -17,7 +17,7 @@ class TablePolicyEngine(PolicyEnginePort):
         if current_state in state_plan.terminal_states:
             return PolicyDecision(kind="finish", reason="terminal_state_reached")
 
-        current_node = state_plan.node_for(current_state)
+        current_node = state_plan.node_for(current_state, context.blackboard)
         if current_node is None:
             return PolicyDecision(
                 kind="fail",
@@ -34,7 +34,7 @@ class TablePolicyEngine(PolicyEnginePort):
         # broad scan noise; both are gone now.
         observation_sync_threshold = 0.6
         if can_sync_by_observation and observed_state != current_state and observed_state:
-            observed_node = state_plan.node_for(observed_state)
+            observed_node = state_plan.node_for(observed_state, context.blackboard)
             if observed_state in state_plan.terminal_states and estimate.confidence >= observation_sync_threshold:
                 return PolicyDecision(kind="finish", reason="terminal_state_observed")
             if observed_node is not None and estimate.confidence >= observation_sync_threshold:

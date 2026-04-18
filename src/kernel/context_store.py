@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
 
+from src.domain.blackboard import Blackboard
 from src.domain.layered_state import LayeredRuntimeState
 
 
@@ -20,6 +21,7 @@ class RunContext:
     layered_state: LayeredRuntimeState = field(default_factory=LayeredRuntimeState)
     last_error: dict[str, Any] = field(default_factory=dict)
     pending_transition: dict[str, Any] = field(default_factory=dict)
+    blackboard: Blackboard = field(default_factory=Blackboard)
 
 
 class ContextStore:

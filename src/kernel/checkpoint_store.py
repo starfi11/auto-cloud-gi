@@ -26,6 +26,7 @@ class CheckpointStore:
             "layered_state": asdict(context.layered_state) if is_dataclass(context.layered_state) else {},
             "last_error": context.last_error,
             "pending_transition": context.pending_transition,
+            "blackboard": context.blackboard.snapshot(),
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
