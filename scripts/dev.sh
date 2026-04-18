@@ -113,10 +113,15 @@ cmd_start() {
   out=$("${CTL[@]}" start --profile "$profile" --scenario "$scenario" --trigger "$trigger" --idem "$idem")
   printf '%s\n' "$out"
   local id
-  id=$(printf '%s' "$out" | "$PY" -c 'import json,sys;
-try: d = json.load(sys.stdin)
-except Exception: d = {}
-print(d.get("run_id", ""))
+  id=$(printf '%s' "$out" | "$PY" -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+if not isinstance(d, dict):
+    d = {}
+rid = d.get("run_id") or d.get("receipt", {}).get("run_id", "")
+print(rid or "")
 ' 2>/dev/null || true)
   if [[ -n "$id" ]]; then
     save_id "$id"
@@ -160,10 +165,15 @@ cmd_wait() {
   while :; do
     local json status
     json=$("${CTL[@]}" show "$id" 2>/dev/null || true)
-    status=$(printf '%s' "$json" | "$PY" -c 'import json,sys;
-try: d = json.load(sys.stdin)
-except Exception: d = {}
-print(d.get("status", ""))
+    status=$(printf '%s' "$json" | "$PY" -c 'import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    d = {}
+if not isinstance(d, dict):
+    d = {}
+run = d.get("run") if isinstance(d.get("run"), dict) else d
+print(run.get("status", "") if isinstance(run, dict) else "")
 ' 2>/dev/null || true)
     if [[ -z "$status" ]]; then
       echo "error: cannot read status for $id" >&2; exit 2
