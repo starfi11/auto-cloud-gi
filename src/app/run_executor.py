@@ -111,10 +111,12 @@ class RunExecutor:
             tick_t0 = perf_counter()
             estimate = self._state_estimator.estimate(context, plan, expected_states=expected)
             estimate_ms = round((perf_counter() - tick_t0) * 1000.0, 1)
-            # Narrow-scan low-confidence fallback: if we've been getting weak
-            # signals under narrow scan for several ticks, try one broad scan
-            # to catch unexpected drift (e.g. expected_next misconfigured or
-            # game went to an unforeseen state).
+            # L3 soft-lost: narrow-scan low confidence 3 ticks → force one
+            # broad scan. L4 relocalize: if broad scan then still returns a
+            # confident non-current state, snap current_state to it even when
+            # we'd normally refuse (mid-action, off-expected_next). This is
+            # the escape hatch for unannounced drift — e.g. a popup stole
+            # focus and none of the planned successors match.
             if expected is not None:
                 if estimate.confidence < 0.4:
                     narrow_low = int(context.retries.get("_narrow_scan_low", 0)) + 1
@@ -127,6 +129,8 @@ class RunExecutor:
                             "narrow_scan_fallback_broad",
                             {"tick": tick, "current_state": context.state},
                         )
+                        if self._maybe_relocalize(context, plan, estimate, tick):
+                            continue
                 else:
                     context.retries["_narrow_scan_low"] = 0
             self._logs.run_event(
@@ -279,6 +283,50 @@ class RunExecutor:
                 "frames_dir": os.getenv("ACGI_FRAMES_DIR", "./runtime/frames") if save_frames else None,
             },
         )
+
+    def _maybe_relocalize(
+        self,
+        context: RunContext,
+        plan: WorkflowPlan,
+        estimate: Any,
+        tick: int,
+    ) -> bool:
+        """L4: snap context.state to the broad-scan winner when drifted.
+
+        Returns True when we relocalized (caller should skip the rest of
+        this tick — next tick will re-plan from the new state). Relocalize
+        only fires when:
+          - broad scan returned a confident (>=0.75) state label
+          - that label is a real plan state, not context.state, and is
+            not already a successor we were scanning for (a real successor
+            should have been caught by narrow scan).
+        """
+        sp = plan.state_plan
+        if sp is None:
+            return False
+        target = (estimate.state or "").strip()
+        if not target or target == context.state:
+            return False
+        if estimate.confidence < 0.75:
+            return False
+        known = {n.state for n in sp.nodes} | set(sp.terminal_states)
+        if target not in known:
+            return False
+        # Clear pending transition to avoid spurious commit on the new state.
+        context.pending_transition = {}
+        self._logs.run_event(
+            context.run_id,
+            "relocalized",
+            {
+                "tick": tick,
+                "from": context.state,
+                "to": target,
+                "confidence": estimate.confidence,
+                "reason": "broad_scan_drift",
+            },
+        )
+        self._transition(context, target, reason="relocalize_broad_scan")
+        return True
 
     def _advance_scenario(self, context: RunContext, plan: WorkflowPlan, tick: int) -> None:
         """Push current_goal to the blackboard based on plan.scenario_spec.
