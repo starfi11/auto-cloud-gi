@@ -35,9 +35,11 @@ def build_cloud_segment(
         "transition_settle_seconds": float(override.get("transition_settle_seconds", 2.0)),
         "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 60.0)),
         "transition_require_observed": bool(override.get("transition_require_observed", True)),
-        "transition_observed_ticks": int(override.get("transition_observed_ticks", 3)),
+        "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
     }
 
+    # 文档语义：启动后可能直接在首页，也可能先弹每日奖励。
+    # 用 optional 关闭动作吸收分支差异，避免引入统一分流枢纽状态。
     close_reward_steps = [
         {
             "op": "click_element",
@@ -45,6 +47,7 @@ def build_cloud_segment(
             "element_profile": "genshin_cloud",
             "timeout_seconds": 2.0,
             "poll_seconds": 0.08,
+            "optional": True,
         }
     ]
     click_start_game_steps = [
@@ -52,11 +55,12 @@ def build_cloud_segment(
             "op": "click_element",
             "element_id": "cloud_start_game_button",
             "element_profile": "genshin_cloud",
-            "timeout_seconds": 2.0,
+            "timeout_seconds": 2.5,
             "poll_seconds": 0.08,
         }
     ]
-    queue_select_steps: list[dict[str, object]] = []
+
+    queue_select_steps: list[dict[str, object]]
     if queue_strategy == "quick":
         queue_select_steps = [
             {
@@ -65,6 +69,7 @@ def build_cloud_segment(
                 "element_profile": "genshin_cloud",
                 "timeout_seconds": 2.0,
                 "poll_seconds": 0.08,
+                "optional": True,
             }
         ]
     else:
@@ -75,6 +80,7 @@ def build_cloud_segment(
                 "element_profile": "genshin_cloud",
                 "timeout_seconds": 2.0,
                 "poll_seconds": 0.08,
+                "optional": True,
             }
         ]
 
@@ -89,7 +95,8 @@ def build_cloud_segment(
         }
     ]
 
-    kongyue_steps = kongyue_claim_macro()
+    raw_kongyue = kongyue_claim_macro()
+    kongyue_steps = [{**s, "optional": True} for s in raw_kongyue]
 
     queue_wait_params = {
         "scene": "queue_wait",
@@ -98,6 +105,16 @@ def build_cloud_segment(
         "ready_element_id": "cloud_door_enter",
         "ready_element_profile": "genshin_cloud",
         "element_poll_window_seconds": float(override.get("queue_wait_element_poll_window_seconds", 1.0)),
+        **shared_genshin,
+    }
+
+    in_game_wait_params = {
+        "scene": "in_game",
+        "timeout_seconds": float(override.get("in_game_wait_timeout_seconds", 120.0)),
+        "text_poll_seconds": float(override.get("in_game_wait_poll_seconds", 0.4)),
+        "ready_element_id": "cloud_ingame_bag_icon",
+        "ready_element_profile": "genshin_cloud",
+        "element_poll_window_seconds": float(override.get("in_game_element_poll_window_seconds", 0.8)),
         **shared_genshin,
     }
 
@@ -113,26 +130,10 @@ def build_cloud_segment(
             ),
             controller_id="genshin_controller",
             context_id="genshin_window",
-            next_state="S_CLOUD_DISCOVER",
+            next_state="S_CLOUD_DAILY_REWARD",
             stable_ticks=1,
-            expected_next=("S_CLOUD_DISCOVER",),
+            expected_next=("S_CLOUD_DAILY_REWARD",),
             recoverability="safe_reentry",
-        ),
-        StateNode(
-            state="S_CLOUD_DISCOVER",
-            controller_id="genshin_controller",
-            context_id="genshin_window",
-            wait_seconds=0.12,
-            stable_ticks=1,
-            expected_next=(
-                "S_CLOUD_DAILY_REWARD",
-                "S_CLOUD_HOME",
-                "S_CLOUD_QUEUE_SELECT",
-                "S_CLOUD_QUEUE_WAIT",
-                "S_CLOUD_DOOR",
-                "S_CLOUD_KONGYUE",
-                "S_CLOUD_IN_GAME",
-            ),
         ),
         StateNode(
             state="S_CLOUD_DAILY_REWARD",
@@ -145,9 +146,9 @@ def build_cloud_segment(
             ),
             controller_id="genshin_controller",
             context_id="genshin_window",
-            next_state="S_CLOUD_DISCOVER",
-            stable_ticks=2,
-            expected_next=("S_CLOUD_DISCOVER", "S_CLOUD_HOME"),
+            next_state="S_CLOUD_HOME",
+            stable_ticks=1,
+            expected_next=("S_CLOUD_HOME",),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {
@@ -172,24 +173,12 @@ def build_cloud_segment(
             ),
             controller_id="genshin_controller",
             context_id="genshin_window",
-            next_state="S_CLOUD_DISCOVER",
-            stable_ticks=2,
-            expected_next=("S_CLOUD_DISCOVER", "S_CLOUD_QUEUE_SELECT", "S_CLOUD_QUEUE_WAIT", "S_CLOUD_DOOR"),
+            next_state="S_CLOUD_QUEUE_SELECT",
+            stable_ticks=1,
+            expected_next=("S_CLOUD_QUEUE_SELECT",),
             recognition={
                 "profile": "genshin_cloud",
-                "expr": {
-                    "op": "all",
-                    "items": [
-                        {"present": "cloud_start_game_button"},
-                        {
-                            "op": "any",
-                            "items": [
-                                {"present": "cloud_home_genshin_logo"},
-                                {"present": "cloud_start_game_button"},
-                            ],
-                        },
-                    ],
-                },
+                "expr": {"present": "cloud_start_game_button"},
             },
             recoverability="safe_reentry",
         ),
@@ -204,9 +193,9 @@ def build_cloud_segment(
             ),
             controller_id="genshin_controller",
             context_id="genshin_window",
-            next_state="S_CLOUD_DISCOVER",
-            stable_ticks=2,
-            expected_next=("S_CLOUD_DISCOVER", "S_CLOUD_QUEUE_WAIT", "S_CLOUD_DOOR"),
+            next_state="S_CLOUD_QUEUE_WAIT",
+            stable_ticks=1,
+            expected_next=("S_CLOUD_QUEUE_WAIT",),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {
@@ -232,8 +221,8 @@ def build_cloud_segment(
             controller_id="genshin_controller",
             context_id="genshin_window",
             next_state="S_CLOUD_DOOR",
-            stable_ticks=2,
-            expected_next=("S_CLOUD_QUEUE_WAIT", "S_CLOUD_DOOR"),
+            stable_ticks=1,
+            expected_next=("S_CLOUD_DOOR",),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {
@@ -259,24 +248,12 @@ def build_cloud_segment(
             ),
             controller_id="genshin_controller",
             context_id="genshin_window",
-            next_state="S_CLOUD_DISCOVER",
-            stable_ticks=3,
-            expected_next=("S_CLOUD_DISCOVER", "S_CLOUD_KONGYUE", "S_CLOUD_IN_GAME"),
+            next_state="S_CLOUD_KONGYUE",
+            stable_ticks=1,
+            expected_next=("S_CLOUD_KONGYUE",),
             recognition={
                 "profile": "genshin_cloud",
-                "expr": {
-                    "op": "all",
-                    "items": [
-                        {"present": "cloud_door_enter"},
-                        {
-                            "op": "any",
-                            "items": [
-                                {"present": "cloud_door_icon"},
-                                {"present": "cloud_door_enter"},
-                            ],
-                        },
-                    ],
-                },
+                "expr": {"present": "cloud_door_enter"},
             },
             recoverability="safe_reentry",
         ),
@@ -291,12 +268,32 @@ def build_cloud_segment(
             ),
             controller_id="genshin_controller",
             context_id="genshin_window",
-            next_state="S_CLOUD_DISCOVER",
-            stable_ticks=2,
-            expected_next=("S_CLOUD_DISCOVER", "S_CLOUD_IN_GAME"),
+            next_state="S_CLOUD_IN_GAME_WAIT",
+            stable_ticks=1,
+            expected_next=("S_CLOUD_IN_GAME_WAIT",),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {"present": "cloud_kongyue_reward_text"},
+            },
+            recoverability="safe_reentry",
+        ),
+        StateNode(
+            state="S_CLOUD_IN_GAME_WAIT",
+            action=ActionIntent(
+                name="wait_in_game_ready",
+                kind="game.wait.scene",
+                params={**in_game_wait_params},
+                controller_id="genshin_controller",
+                required_context="genshin_window",
+            ),
+            controller_id="genshin_controller",
+            context_id="genshin_window",
+            next_state="S_CLOUD_IN_GAME",
+            stable_ticks=1,
+            expected_next=("S_CLOUD_IN_GAME",),
+            recognition={
+                "profile": "genshin_cloud",
+                "expr": {"present": "cloud_ingame_bag_icon"},
             },
             recoverability="safe_reentry",
         ),
@@ -305,7 +302,8 @@ def build_cloud_segment(
             controller_id="genshin_controller",
             context_id="genshin_window",
             next_state=handoff_to,
-            stable_ticks=2,
+            stable_ticks=1,
+            wait_seconds=0.15,
             expected_next=((handoff_to,) if handoff_to else None),
             recognition={
                 "profile": "genshin_cloud",
@@ -313,13 +311,7 @@ def build_cloud_segment(
                     "op": "all",
                     "items": [
                         {"present": "cloud_ingame_bag_icon"},
-                        {
-                            "op": "any",
-                            "items": [
-                                {"present": "cloud_uid_text"},
-                                {"present": "cloud_ingame_bag_icon"},
-                            ],
-                        },
+                        {"present": "cloud_uid_text"},
                     ],
                 },
             },
@@ -335,6 +327,7 @@ def build_cloud_segment(
         WorkflowStep(name="wait_queue_finish", kind="game.wait.scene", params={**queue_wait_params}),
         WorkflowStep(name="click_enter_game", kind="game.queue.enter", params={"queue_macro_steps": click_enter_game_steps, **shared_genshin}),
         WorkflowStep(name="claim_kongyue", kind="game.kongyue.claim", params={"kongyue_macro_steps": kongyue_steps, **shared_genshin}),
+        WorkflowStep(name="wait_in_game_ready", kind="game.wait.scene", params={**in_game_wait_params}),
     ]
 
     return ProfileSegment(
@@ -364,11 +357,11 @@ def build_btgi_segment(
         "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
     }
 
-    update_ignore_steps = launch_macro_update_ignore()
     launch_focus_steps = [
         {"op": "sleep", "seconds": float(override.get("btgi_launch_wait_seconds", 10.0))},
         {"op": "hotkey", "keys": ["alt", "tab"], "after_sleep": 0.6},
     ]
+    update_ignore_steps = launch_macro_update_ignore()
     prepare_dropdown_steps = prepare_capture_dropdown_macro()
     adjust_capture_steps = adjust_capture_and_open_one_dragon_macro()
     start_one_dragon_steps = start_one_dragon_macro()
@@ -397,25 +390,10 @@ def build_btgi_segment(
             ),
             controller_id="bettergi_controller",
             context_id="bettergi_panel",
-            next_state="S_BTGI_DISCOVER",
+            next_state="S_BTGI_UPDATE_POPUP",
             stable_ticks=1,
-            expected_next=("S_BTGI_DISCOVER",),
+            expected_next=("S_BTGI_UPDATE_POPUP",),
             recoverability="safe_reentry",
-        ),
-        StateNode(
-            state="S_BTGI_DISCOVER",
-            controller_id="bettergi_controller",
-            context_id="bettergi_panel",
-            wait_seconds=0.15,
-            stable_ticks=1,
-            expected_next=(
-                "S_BTGI_UPDATE_POPUP",
-                "S_BTGI_HOME",
-                "S_BTGI_CAPTURE_WAIT",
-                "S_BTGI_ONE_DRAGON_PAGE",
-                "S_BTGI_ONE_DRAGON_STARTED",
-                "S_BTGI_DONE",
-            ),
         ),
         StateNode(
             state="S_BTGI_UPDATE_POPUP",
@@ -433,9 +411,9 @@ def build_btgi_segment(
             ),
             controller_id="bettergi_controller",
             context_id="bettergi_panel",
-            next_state="S_BTGI_DISCOVER",
-            stable_ticks=2,
-            expected_next=("S_BTGI_DISCOVER", "S_BTGI_HOME"),
+            next_state="S_BTGI_HOME",
+            stable_ticks=1,
+            expected_next=("S_BTGI_HOME",),
             recognition={
                 "profile": "bettergi",
                 "expr": {
@@ -465,7 +443,7 @@ def build_btgi_segment(
             controller_id="bettergi_controller",
             context_id="bettergi_panel",
             next_state="S_BTGI_CAPTURE_WAIT",
-            stable_ticks=2,
+            stable_ticks=1,
             expected_next=("S_BTGI_CAPTURE_WAIT",),
             recognition={
                 "profile": "bettergi",
@@ -497,7 +475,7 @@ def build_btgi_segment(
             controller_id="bettergi_controller",
             context_id="bettergi_panel",
             next_state="S_BTGI_ONE_DRAGON_PAGE",
-            stable_ticks=2,
+            stable_ticks=1,
             expected_next=("S_BTGI_ONE_DRAGON_PAGE",),
             recognition={
                 "profile": "bettergi",
@@ -522,7 +500,7 @@ def build_btgi_segment(
             controller_id="bettergi_controller",
             context_id="bettergi_panel",
             next_state="S_BTGI_ONE_DRAGON_STARTED",
-            stable_ticks=2,
+            stable_ticks=1,
             expected_next=("S_BTGI_ONE_DRAGON_STARTED",),
             recognition={
                 "profile": "bettergi",
