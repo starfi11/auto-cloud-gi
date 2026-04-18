@@ -228,8 +228,13 @@ class ElementResolver(ElementResolverPort):
         return nx, ny, max(1, nw), max(1, nh)
 
     def _ordered_matchers(self, matchers: list[MatcherSpec]) -> list[MatcherSpec]:
-        # Text-first, then template fallback.
-        return sorted(matchers, key=lambda m: 0 if m.kind == "text_ocr" else 1)
+        # Template-first, OCR as fallback. Templates are ~10-30ms; OCR is
+        # ~500-800ms per call. When both are declared on an element we want
+        # the cheap matcher to win first, so a hit skips OCR entirely and
+        # a miss falls through to OCR exactly once. Previously OCR-first
+        # burned the OCR cost on every tick even when a template would
+        # have answered in milliseconds.
+        return sorted(matchers, key=lambda m: 0 if m.kind == "template" else 1)
 
     def _try_match(
         self,

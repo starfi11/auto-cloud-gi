@@ -22,6 +22,9 @@ class FakeBackend:
         self.locate_calls.append((str(template_path), region))
         if region is None:
             return (100, 100, 50, 40)
+        # Tests opt-in to ROI hits by toggling locate_roi_hit.
+        if getattr(self, "locate_roi_hit", False):
+            return (region[0] + 5, region[1] + 5, 50, 40)
         return None
 
     def click(self, x: int, y: int, clicks: int = 1) -> None:
@@ -43,9 +46,13 @@ class FakeOcr:
 
 
 class UiElementResolverTest(unittest.TestCase):
-    def test_text_first_short_circuits_template(self) -> None:
+    def test_template_first_short_circuits_ocr(self) -> None:
+        # Template matchers are cheap (~10ms); OCR is expensive (~800ms).
+        # When both are declared, a template hit must skip OCR entirely.
         with TemporaryDirectory() as td:
             td_path = Path(td)
+            (td_path / "default").mkdir(parents=True, exist_ok=True)
+            (td_path / "default" / "btn.png").write_bytes(b"x")
             spec = {
                 "elements": [
                     {
@@ -54,7 +61,7 @@ class UiElementResolverTest(unittest.TestCase):
                         "roi": [0, 0, 100, 100],
                         "matchers": [
                             {"kind": "text_ocr", "text_any": ["开始游戏"]},
-                            {"kind": "template", "template_key": "x"},
+                            {"kind": "template", "template_key": "btn"},
                         ],
                     }
                 ]
@@ -62,18 +69,32 @@ class UiElementResolverTest(unittest.TestCase):
             spec_path = td_path / "elements.json"
             spec_path.write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
 
+            # Make OCR's response irrelevant — if template fires first, OCR
+            # should never be consulted. The assertion is that backend.locate
+            # ran and r.matcher_kind == "template".
+            ocr = FakeOcr("这里有开始游戏按钮")
+            ocr_calls: list[int] = []
+            original_read = ocr.read_text
+
+            def counted_read(image):  # noqa: ANN001
+                ocr_calls.append(1)
+                return original_read(image)
+
+            ocr.read_text = counted_read  # type: ignore[assignment]
+
             backend = FakeBackend(text="这里有开始游戏按钮")
+            backend.locate_roi_hit = True  # template matches inside the element's ROI
             registry = ElementRegistry.from_json(str(spec_path))
             resolver = ElementResolver(
                 backend,
                 registry=registry,
                 template_root=str(td_path),
-                ocr_engine=FakeOcr("这里有开始游戏按钮"),
+                ocr_engine=ocr,
             )
             r = resolver.resolve(element_id="e1", profile="default", timeout_seconds=0.2, poll_seconds=0.05)
             self.assertTrue(r.ok)
-            self.assertEqual(r.matcher_kind, "text_ocr")
-            self.assertEqual(len(backend.locate_calls), 0)
+            self.assertEqual(r.matcher_kind, "template")
+            self.assertEqual(ocr_calls, [], "OCR must not be called when template hits first")
 
     def test_roi_miss_falls_back_to_global_template(self) -> None:
         with TemporaryDirectory() as td:
