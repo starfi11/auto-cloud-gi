@@ -111,13 +111,32 @@ class SpecStateEstimator(StateEstimatorPort):
         # Narrow-scan filter: evaluate only the expected_states set (plus
         # current state implicitly — caller should include it if desired).
         # None means broad scan.
+        #
+        # Under narrow scan we honor the caller's declared order: current
+        # state first, then expected_next successors. Combined with early-
+        # exit on high-confidence hits, this cuts OCR by skipping the long
+        # tail when the first candidate already nailed the frame.
         if expected_states is None:
-            nodes_to_eval = sp.nodes
+            nodes_to_eval = list(sp.nodes)
             scan_mode = "broad"
         else:
-            wanted = set(expected_states)
-            nodes_to_eval = [n for n in sp.nodes if n.state in wanted]
+            by_state: dict[str, list[StateNode]] = {}
+            for n in sp.nodes:
+                by_state.setdefault(n.state, []).append(n)
+            nodes_to_eval = []
+            seen: set[int] = set()
+            for s in expected_states:
+                for n in by_state.get(s, []):
+                    if id(n) not in seen:
+                        seen.add(id(n))
+                        nodes_to_eval.append(n)
             scan_mode = "narrow"
+
+        # Confidence above which narrow-scan short-circuits; the policy's
+        # observation-sync threshold is 0.6, so 0.85 gives us a safety margin
+        # for partial matches on noise frames.
+        early_exit_threshold = 0.85
+        early_exited = False
 
         evals: list[_NodeEval] = []
         candidates: list[PerceptionCandidate] = []
@@ -155,12 +174,22 @@ class SpecStateEstimator(StateEstimatorPort):
             )
             all_evidence.extend(ev.evidence_refs)
 
+            # Early-exit under narrow scan: once a candidate clears the
+            # threshold, stop evaluating the rest. Broad scan keeps scanning
+            # because we want to detect unexpected drift.
+            if scan_mode == "narrow" and ev.confidence >= early_exit_threshold:
+                early_exited = True
+                break
+
         # Nest all per-tick frame diagnostics under signals["frame"] so future
         # additions (template_calls etc.) don't balloon the top-level signals
         # blob. Consumers today only serialize signals as an opaque JSONL blob,
         # so this is a pure schema reshape.
         frame_block: dict[str, Any] = dict(frame.stats())
         frame_block["frame_path"] = None
+        frame_block["early_exited"] = early_exited
+        frame_block["nodes_evaluated"] = len(evals)
+        frame_block["nodes_planned"] = len(nodes_to_eval)
 
         if not evals:
             # Narrow scan filtered every plan node out. Either expected_states
