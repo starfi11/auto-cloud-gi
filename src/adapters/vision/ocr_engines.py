@@ -48,10 +48,9 @@ class PaddleOcrEngine(OcrEnginePort):
 
         self.last_text = ""
         paddle_lang = _normalize_paddle_lang(lang)
-        # PP-OCRv4_mobile is 3-5x faster than PP-OCRv5 on CPU with minimal
-        # accuracy loss for coarse UI keyword matching. Override via env for
-        # debugging or tighter accuracy needs.
-        ocr_version = os.getenv("PADDLE_OCR_VERSION", "PP-OCRv4_mobile").strip() or "PP-OCRv4_mobile"
+        # Default to a broadly supported model version. Override via env if a
+        # faster/slimmer variant is validated in your runtime.
+        ocr_version = os.getenv("PADDLE_OCR_VERSION", "PP-OCRv5").strip() or "PP-OCRv5"
         use_doc_orientation_classify = _bool_env("PADDLE_OCR_USE_DOC_ORIENTATION", default=False)
         use_doc_unwarping = _bool_env("PADDLE_OCR_USE_DOC_UNWARPING", default=False)
         use_textline_orientation = _bool_env("PADDLE_OCR_USE_TEXTLINE_ORI", default=False)

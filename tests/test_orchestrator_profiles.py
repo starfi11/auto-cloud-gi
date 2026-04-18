@@ -26,7 +26,7 @@ class OrchestratorProfilesTest(unittest.TestCase):
                     RunRequest(
                         trigger="API_TRIGGER",
                         idempotency_key="pc-1",
-                        target_profile="genshin_pc_bettergi",
+                        target_profile="unknown_profile_for_test",
                         scenario="daily_default",
                     )
                 )

@@ -50,6 +50,13 @@
       "matchers": [{"kind": "text_ocr", "text_any": ["快速排队", "优先队列"]}]
     },
     {
+      "id": "cloud_queue_select_title",
+      "profile": "genshin_cloud",
+      "roi": [520, 220, 560, 180],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["请选择排队队列", "选择排队队列"]}]
+    },
+    {
       "id": "cloud_queue_exit_text",
       "profile": "genshin_cloud",
       "roi": [160, 90, 260, 100],
@@ -99,6 +106,13 @@
       "matchers": [{"kind": "template", "template_key": "cloud_ingame_bag_icon", "confidence": 0.85}]
     },
     {
+      "id": "cloud_uid_text",
+      "profile": "genshin_cloud",
+      "roi": [1340, 820, 260, 80],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["UID"]}]
+    },
+    {
       "id": "btgi_update_popup",
       "profile": "bettergi",
       "roi": [880, 620, 560, 260],
@@ -123,6 +137,20 @@
       "matchers": [{"kind": "text_ocr", "text_any": ["截图器"]}]
     },
     {
+      "id": "btgi_home_title",
+      "profile": "bettergi",
+      "roi": [420, 180, 760, 240],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["BetterGI"]}]
+    },
+    {
+      "id": "btgi_home_subtitle",
+      "profile": "bettergi",
+      "roi": [420, 220, 760, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["更好的原神"]}]
+    },
+    {
       "id": "btgi_screenshot_dropdown_settings",
       "profile": "bettergi",
       "roi": [1150, 430, 360, 230],
@@ -142,6 +170,41 @@
       "roi": [700, 200, 620, 260],
       "base_size": [1600, 900],
       "matchers": [{"kind": "template", "template_key": "btgi_one_click_start_button", "confidence": 0.9}]
+    },
+    {
+      "id": "btgi_capture_select_window",
+      "profile": "bettergi",
+      "roi": [560, 280, 780, 220],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["选择捕获窗口"]}]
+    },
+    {
+      "id": "btgi_capture_target_genshin",
+      "profile": "bettergi",
+      "roi": [420, 260, 980, 520],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["原神"]}]
+    },
+    {
+      "id": "btgi_one_dragon_entry",
+      "profile": "bettergi",
+      "roi": [420, 160, 360, 680],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["一条龙"]}]
+    },
+    {
+      "id": "btgi_task_list",
+      "profile": "bettergi",
+      "roi": [520, 100, 760, 260],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["任务列表"]}]
+    },
+    {
+      "id": "btgi_config_label",
+      "profile": "bettergi",
+      "roi": [560, 100, 760, 300],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "text_ocr", "text_any": ["配置"]}]
     }
   ]
 }

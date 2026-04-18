@@ -11,7 +11,12 @@ import uuid
 from src.adapters.local_command_adapter import LocalFileCommandAdapter
 from src.adapters.controllers import ActionDispatcherController, BlackboardController, ControllerRouter
 from src.adapters.policy import TransitionPolicyEngine
-from src.adapters.profiles import GenshinCloudBetterGIProfile
+from src.adapters.profiles import (
+    BetterGIOneDragonProfile,
+    GenshinCloudBetterGIProfile,
+    GenshinCloudLaunchProfile,
+    GenshinPCBetterGIProfile,
+)
 from src.adapters.recovery import NoopAiRecoveryPlanner, TableRecoveryStrategy
 from src.adapters.state import SpecStateEstimator
 from src.adapters.stdout_notify_adapter import StdoutNotifyAdapter
@@ -73,7 +78,10 @@ class Orchestrator(TriggerPort):
         self._signals = RunSignalCenter()
         self._profiles = ProfileRegistry(
             _profiles={
+                "bettergi_one_dragon": BetterGIOneDragonProfile(),
                 "genshin_cloud_bettergi": GenshinCloudBetterGIProfile(),
+                "genshin_cloud_launch": GenshinCloudLaunchProfile(),
+                "genshin_pc_bettergi": GenshinPCBetterGIProfile(),
             },
             _default_profile=default_profile,
         )
@@ -133,7 +141,12 @@ class Orchestrator(TriggerPort):
                 "command_source_file": command_source_file,
                 "concurrency_mode": concurrency_mode,
                 "default_profile": default_profile,
-                "profiles": ["genshin_cloud_bettergi"],
+                "profiles": [
+                    "genshin_cloud_bettergi",
+                    "genshin_cloud_launch",
+                    "bettergi_one_dragon",
+                    "genshin_pc_bettergi",
+                ],
             },
         )
 
