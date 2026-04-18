@@ -300,6 +300,12 @@ class RunExecutor:
           - that label is a real plan state, not context.state, and is
             not already a successor we were scanning for (a real successor
             should have been caught by narrow scan).
+
+        L5 escalation: if the state we are leaving is marked ``destructive``,
+        we refuse to silently relocalize and raise ``InterruptError``
+        instead. The assumption is that a destructive node ran code with
+        side effects and silently advancing would hide that state from the
+        operator.
         """
         sp = plan.state_plan
         if sp is None:
@@ -312,6 +318,24 @@ class RunExecutor:
         known = {n.state for n in sp.nodes} | set(sp.terminal_states)
         if target not in known:
             return False
+
+        current_node = sp.node_for(context.state, context.blackboard) if context.state else None
+        if current_node is not None and current_node.recoverability == "destructive":
+            self._logs.run_event(
+                context.run_id,
+                "relocalize_escalated",
+                {
+                    "tick": tick,
+                    "from": context.state,
+                    "observed": target,
+                    "confidence": estimate.confidence,
+                    "reason": "destructive_node_no_silent_relocalize",
+                },
+            )
+            raise InterruptError(
+                f"relocalize_on_destructive:{context.state}->{target}"
+            )
+
         # Clear pending transition to avoid spurious commit on the new state.
         context.pending_transition = {}
         self._logs.run_event(

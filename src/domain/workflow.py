@@ -60,6 +60,14 @@ class StateNode:
     # first one whose guard passes — the mechanism behind "same screen,
     # different action depending on current_goal/counter/phase".
     guard: Guard | None = None
+    # Recoverability class. When a relocalize/retry attempt fails, the
+    # executor uses this to decide how aggressively to recover:
+    #   safe_reentry  -> re-execute the node's action freely (idempotent)
+    #   transient     -> retry a few times, then fall back to broad scan
+    #   destructive   -> escalate to L5 interrupt immediately; the node
+    #                    has side effects we cannot safely repeat
+    # Unspecified (default ``transient``) is safe for the common case.
+    recoverability: str = "transient"
 
 
 @dataclass(frozen=True)
@@ -169,6 +177,7 @@ class WorkflowPlan:
                         "context_id": n.context_id,
                         "expected_next": list(n.expected_next) if n.expected_next is not None else None,
                         "guard": guard_to_dict(n.guard),
+                        "recoverability": n.recoverability,
                         "action": (
                             {
                                 "name": n.action.name,
@@ -253,6 +262,7 @@ class WorkflowPlan:
                         context_id=(str(raw_node["context_id"]) if raw_node.get("context_id") is not None else None),
                         expected_next=expected_next,
                         guard=guard,
+                        recoverability=str(raw_node.get("recoverability", "transient")),
                     )
                 )
 
