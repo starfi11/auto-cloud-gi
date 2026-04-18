@@ -10,6 +10,7 @@ from src.domain.blackboard import (
     guard_from_dict,
     guard_to_dict,
 )
+from src.domain.scenario import ScenarioSpec
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ class WorkflowPlan:
     mode: str = "state_driven"
     state_plan: StatePlan | None = None
     steps: list[WorkflowStep] = field(default_factory=list)
+    scenario_spec: ScenarioSpec | None = None
 
     def action_steps_from_state_plan(self) -> list[WorkflowStep]:
         """Derive WorkflowSteps from the state plan's action-bearing nodes.
@@ -149,6 +151,8 @@ class WorkflowPlan:
                 for s in self.steps
             ],
         }
+        if self.scenario_spec is not None:
+            payload["scenario_spec"] = self.scenario_spec.to_dict()
         if self.state_plan is not None:
             payload["state_plan"] = {
                 "initial_state": self.state_plan.initial_state,
@@ -261,6 +265,11 @@ class WorkflowPlan:
                 max_ticks=int(raw_state_plan.get("max_ticks", 200)),
             )
 
+        raw_scenario_spec = payload.get("scenario_spec")
+        scenario_spec: ScenarioSpec | None = None
+        if isinstance(raw_scenario_spec, dict):
+            scenario_spec = ScenarioSpec.from_dict(raw_scenario_spec)
+
         return WorkflowPlan(
             profile=str(payload.get("profile", "")),
             game=str(payload.get("game", "")),
@@ -268,4 +277,5 @@ class WorkflowPlan:
             mode=str(payload.get("mode", "linear" if state_plan is None else "state_driven")),
             state_plan=state_plan,
             steps=steps,
+            scenario_spec=scenario_spec,
         )

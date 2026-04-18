@@ -4,6 +4,7 @@ import os
 from time import perf_counter, sleep
 from typing import Callable, Any, Protocol
 
+from src.domain.scenario import advance_scenario
 from src.domain.stages import Stage
 from src.domain.state_kernel import PolicyDecision
 from src.domain.workflow import WorkflowPlan, WorkflowStep
@@ -103,6 +104,7 @@ class RunExecutor:
 
         for tick in range(state_plan.max_ticks):
             self._check_preempt(context)
+            self._advance_scenario(context, plan, tick)
             if self._process_pending_transition(context, plan, tick):
                 continue
             expected = self._expected_states_for_scan(context, plan)
@@ -277,6 +279,24 @@ class RunExecutor:
                 "frames_dir": os.getenv("ACGI_FRAMES_DIR", "./runtime/frames") if save_frames else None,
             },
         )
+
+    def _advance_scenario(self, context: RunContext, plan: WorkflowPlan, tick: int) -> None:
+        """Push current_goal to the blackboard based on plan.scenario_spec.
+
+        No-op when the plan has no scenario. Logs goal changes so the replay
+        shows *why* a guard flipped.
+        """
+        spec = plan.scenario_spec
+        if spec is None:
+            return
+        before = context.blackboard.get("current_goal")
+        after = advance_scenario(spec, context.blackboard)
+        if before != after:
+            self._logs.run_event(
+                context.run_id,
+                "scenario_goal_changed",
+                {"tick": tick, "from": before, "to": after, "done": after is None},
+            )
 
     def _expected_states_for_scan(
         self, context: RunContext, plan: WorkflowPlan
