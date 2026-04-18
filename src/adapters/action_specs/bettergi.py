@@ -33,7 +33,7 @@ def one_dragon_drive_macro() -> list[dict[str, Any]]:
         {"op": "scroll", "amount": -600, "after_sleep": 0.2},
         {
             "op": "click_element",
-            "element_id": "btgi_home",
+            "element_id": "btgi_dropdown_arrow",
             "element_profile": "bettergi",
             "timeout_seconds": 10.0,
             "poll_seconds": 0.25,

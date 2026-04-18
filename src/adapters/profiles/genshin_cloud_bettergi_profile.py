@@ -212,13 +212,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                     expected_next=("S_DISCOVER_CLOUD", "S_QUEUEING", "S_ENTER_PROMPT"),
                     recognition={
                         "profile": "genshin_cloud",
-                        "expr": {
-                            "op": "any",
-                            "items": [
-                                {"present": "cloud_start_game_button"},
-                                {"present": "cloud_home_genshin_logo"},
-                            ],
-                        },
+                        "expr": {"present": "cloud_start_game_button"},
                         "timeout_seconds": 0.10,
                         "poll_seconds": 0.03,
                     },
@@ -266,13 +260,7 @@ class GenshinCloudBetterGIProfile(AutomationProfilePort):
                             "items": [
                                 {"absent": "cloud_queue_exit_text"},
                                 {"absent": "cloud_queue_eta_text"},
-                                {
-                                    "op": "any",
-                                    "items": [
-                                        {"present": "cloud_door_enter"},
-                                        {"present": "cloud_door_icon"},
-                                    ],
-                                },
+                                {"present": "cloud_door_enter"},
                             ],
                         },
                         "timeout_seconds": 0.20,
