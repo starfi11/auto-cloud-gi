@@ -3,6 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.domain.blackboard import (
+    Blackboard,
+    Guard,
+    evaluate_guard,
+    guard_from_dict,
+    guard_to_dict,
+)
+
 
 @dataclass(frozen=True)
 class WorkflowStep:
@@ -46,6 +54,11 @@ class StateNode:
     # None  -> hub/broad-scan (estimator evaluates every node in the plan).
     # list  -> narrow scan restricted to these successors + self.
     expected_next: tuple[str, ...] | None = None
+    # Optional predicate over the run blackboard. When multiple nodes
+    # share the same ``state`` name, ``StatePlan.node_for`` picks the
+    # first one whose guard passes — the mechanism behind "same screen,
+    # different action depending on current_goal/counter/phase".
+    guard: Guard | None = None
 
 
 @dataclass(frozen=True)
@@ -55,9 +68,21 @@ class StatePlan:
     nodes: list[StateNode]
     max_ticks: int = 200
 
-    def node_for(self, state: str) -> StateNode | None:
+    def node_for(
+        self,
+        state: str,
+        blackboard: Blackboard | None = None,
+    ) -> StateNode | None:
+        """Return the first node matching ``state`` whose guard passes.
+
+        Back-compatible: legacy callers omit ``blackboard`` and get the
+        first same-named node (unguarded nodes always pass, so profiles
+        without guards behave exactly as before).
+        """
         for node in self.nodes:
-            if node.state == state:
+            if node.state != state:
+                continue
+            if evaluate_guard(node.guard, blackboard):
                 return node
         return None
 
@@ -139,6 +164,7 @@ class WorkflowPlan:
                         "controller_id": n.controller_id,
                         "context_id": n.context_id,
                         "expected_next": list(n.expected_next) if n.expected_next is not None else None,
+                        "guard": guard_to_dict(n.guard),
                         "action": (
                             {
                                 "name": n.action.name,
@@ -205,6 +231,8 @@ class WorkflowPlan:
                     )
                 else:
                     expected_next = None
+                raw_guard = raw_node.get("guard")
+                guard = guard_from_dict(raw_guard) if isinstance(raw_guard, dict) else None
                 nodes.append(
                     StateNode(
                         state=state,
@@ -220,6 +248,7 @@ class WorkflowPlan:
                         controller_id=(str(raw_node["controller_id"]) if raw_node.get("controller_id") is not None else None),
                         context_id=(str(raw_node["context_id"]) if raw_node.get("context_id") is not None else None),
                         expected_next=expected_next,
+                        guard=guard,
                     )
                 )
 
