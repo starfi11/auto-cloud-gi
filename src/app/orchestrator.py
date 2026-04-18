@@ -9,7 +9,7 @@ import traceback
 import uuid
 
 from src.adapters.local_command_adapter import LocalFileCommandAdapter
-from src.adapters.controllers import ActionDispatcherController, ControllerRouter
+from src.adapters.controllers import ActionDispatcherController, BlackboardController, ControllerRouter
 from src.adapters.policy import TransitionPolicyEngine
 from src.adapters.profiles import GenshinCloudBetterGIProfile
 from src.adapters.recovery import NoopAiRecoveryPlanner, TableRecoveryStrategy
@@ -87,6 +87,7 @@ class Orchestrator(TriggerPort):
         self._context_manager = ContextManager(default_context_id="global")
         controller_router = ControllerRouter(
             controllers=[
+                BlackboardController(),
                 ActionDispatcherController(
                     _controller_id="genshin_controller",
                     dispatcher=dispatcher,
