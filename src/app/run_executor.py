@@ -102,7 +102,8 @@ class RunExecutor:
         if context.state in {"", "BOOTSTRAP", str(Stage.LOAD_POLICY)}:
             self._transition(context, state_plan.initial_state, reason="state_plan_initial_state")
 
-        for tick in range(state_plan.max_ticks):
+        tick = 0
+        while tick < state_plan.max_ticks:
             self._check_preempt(context)
             self._advance_scenario(context, plan, tick)
             if self._process_pending_transition(context, plan, tick):
@@ -160,9 +161,14 @@ class RunExecutor:
                         context=context,
                         source_state=acting_state,
                         target_state=decision.next_state,
+                        acceptable_targets=self._acceptable_targets_for_pending(
+                            source_node=current_node,
+                            primary_target=decision.next_state,
+                        ),
                         reason=f"action_success:{step.name}",
                         step=step,
                     )
+                tick += 1
                 continue
             now = perf_counter()
             observe_interval = self._state_scan_interval_seconds(context, current_node.wait_seconds)
@@ -199,6 +205,7 @@ class RunExecutor:
                             {"tick": tick, "current_state": context.state},
                         )
                         if self._maybe_relocalize(context, plan, estimate, tick):
+                            tick += 1
                             continue
                 else:
                     context.retries["_narrow_scan_low"] = 0
@@ -290,10 +297,12 @@ class RunExecutor:
                 if not decision.next_state:
                     raise RuntimeError("policy_transition_missing_next_state")
                 self._transition(context, decision.next_state, reason=decision.reason or "policy_transition")
+                tick += 1
                 continue
 
             if decision.kind == "wait":
                 sleep(max(0.01, float(decision.wait_seconds)))
+                tick += 1
                 continue
 
             if decision.kind == "action":
@@ -312,14 +321,24 @@ class RunExecutor:
                 reentry_key = f"_action_done:{acting_state}"
                 context.retries[reentry_key] = int(context.retries.get(reentry_key, 0)) + 1
                 if decision.next_state:
+                    acting_node = (
+                        state_plan.node_for(acting_state, context.blackboard)
+                        if state_plan is not None
+                        else None
+                    )
                     self._create_pending_transition(
                         plan=plan,
                         context=context,
                         source_state=acting_state,
                         target_state=decision.next_state,
+                        acceptable_targets=self._acceptable_targets_for_pending(
+                            source_node=acting_node,
+                            primary_target=decision.next_state,
+                        ),
                         reason=f"action_success:{step.name}",
                         step=step,
                     )
+                tick += 1
                 continue
 
             raise RuntimeError(f"unsupported_policy_decision:{decision.kind}")
@@ -480,6 +499,7 @@ class RunExecutor:
         context: RunContext,
         source_state: str,
         target_state: str,
+        acceptable_targets: list[str] | None,
         reason: str,
         step: WorkflowStep,
     ) -> None:
@@ -498,15 +518,28 @@ class RunExecutor:
             ),
         )
         auto_downgraded_observed = False
+        acceptable = [str(s).strip() for s in (acceptable_targets or []) if str(s).strip()]
+        if target_state not in acceptable:
+            acceptable.insert(0, target_state)
+        unique_acceptable: list[str] = []
+        for s in acceptable:
+            if s not in unique_acceptable:
+                unique_acceptable.append(s)
         if require_observed:
-            target_node = plan.state_plan.node_for(target_state, context.blackboard) if plan.state_plan is not None else None
-            has_recognition = bool(target_node and target_node.recognition)
+            has_recognition = False
+            if plan.state_plan is not None:
+                for st in unique_acceptable:
+                    node = plan.state_plan.node_for(st, context.blackboard)
+                    if node and node.recognition:
+                        has_recognition = True
+                        break
             if not has_recognition:
                 require_observed = False
                 auto_downgraded_observed = True
         context.pending_transition = {
             "source_state": source_state,
             "target_state": target_state,
+            "acceptable_targets": unique_acceptable,
             "reason": reason,
             "created_at": now,
             "not_before": now + settle_seconds,
@@ -516,6 +549,7 @@ class RunExecutor:
             "require_observed": require_observed,
             "required_observed_ticks": required_observed_ticks,
             "observed_ticks": 0,
+            "last_observed_target_state": "",
             "observe_interval_seconds": observe_interval_seconds,
             "next_observe_at": now + settle_seconds,
         }
@@ -525,6 +559,7 @@ class RunExecutor:
             {
                 "source_state": source_state,
                 "target_state": target_state,
+                "acceptable_targets": unique_acceptable,
                 "reason": reason,
                 "settle_seconds": settle_seconds,
                 "timeout_seconds": timeout_seconds,
@@ -544,11 +579,18 @@ class RunExecutor:
         if not target_state:
             context.pending_transition = {}
             return False
+        acceptable_targets = [
+            str(s).strip()
+            for s in pending.get("acceptable_targets", [target_state])
+            if str(s).strip()
+        ]
+        if target_state not in acceptable_targets:
+            acceptable_targets.insert(0, target_state)
 
         now = perf_counter()
         deadline = float(pending.get("deadline", now + 0.2))
         if now > deadline:
-            if self._recover_from_transition_timeout(context, plan, tick, target_state):
+            if self._recover_from_transition_timeout(context, plan, tick, target_state, acceptable_targets):
                 return True
             raise RuntimeError(
                 "transition_timeout:"
@@ -569,12 +611,18 @@ class RunExecutor:
                 sleep(min(0.2, max(0.01, next_observe_at - now)))
                 return True
             if self._state_estimator is not None:
-                # Expected-only observation: only probe target_state.
-                estimate = self._state_estimator.estimate(context, plan, expected_states=[target_state])
-                if estimate.state == target_state:
-                    pending["observed_ticks"] = int(pending.get("observed_ticks", 0)) + 1
+                estimate = self._state_estimator.estimate(context, plan, expected_states=acceptable_targets)
+                observed_target = estimate.state if estimate.state in acceptable_targets else ""
+                last_observed = str(pending.get("last_observed_target_state", "")).strip()
+                if observed_target:
+                    if observed_target == last_observed:
+                        pending["observed_ticks"] = int(pending.get("observed_ticks", 0)) + 1
+                    else:
+                        pending["observed_ticks"] = 1
+                    pending["last_observed_target_state"] = observed_target
                 else:
                     pending["observed_ticks"] = 0
+                    pending["last_observed_target_state"] = ""
                 pending["next_observe_at"] = now + observe_interval
                 self._logs.replay_event(
                     context.run_id,
@@ -587,7 +635,7 @@ class RunExecutor:
                         "required_observed_ticks": int(pending.get("required_observed_ticks", 1)),
                         "require_observed": require_observed,
                         "observe_interval_seconds": observe_interval,
-                        "expected_states": [target_state],
+                        "expected_states": acceptable_targets,
                     },
                 )
             observed = int(pending.get("observed_ticks", 0))
@@ -596,15 +644,19 @@ class RunExecutor:
                 sleep(0.1)
                 return True
 
-        self._transition(context, target_state, reason=str(pending.get("reason", "pending_transition_committed")))
+        commit_target = str(pending.get("last_observed_target_state", "")).strip() if require_observed else ""
+        if not commit_target:
+            commit_target = target_state
+        self._transition(context, commit_target, reason=str(pending.get("reason", "pending_transition_committed")))
         self._logs.run_event(
             context.run_id,
             "transition_pending_committed",
             {
                 "source_state": pending.get("source_state", ""),
-                "target_state": target_state,
+                "target_state": commit_target,
                 "reason": pending.get("reason", ""),
                 "observed_ticks": int(pending.get("observed_ticks", 0)),
+                "acceptable_targets": acceptable_targets,
             },
         )
         context.pending_transition = {}
@@ -616,6 +668,7 @@ class RunExecutor:
         plan: WorkflowPlan,
         tick: int,
         target_state: str,
+        acceptable_targets: list[str],
     ) -> bool:
         if self._state_estimator is None:
             return False
@@ -626,6 +679,26 @@ class RunExecutor:
             return False
         context.retries["_recovery_broad_scan_next_at"] = now + cooldown
         estimate = self._state_estimator.estimate(context, plan, expected_states=None)
+        if estimate.state in acceptable_targets and estimate.confidence >= 0.6:
+            self._logs.run_event(
+                context.run_id,
+                "transition_timeout_commit_acceptable",
+                {
+                    "tick": tick,
+                    "current_state": context.state,
+                    "target_state": target_state,
+                    "acceptable_targets": acceptable_targets,
+                    "committed_state": estimate.state,
+                    "confidence": estimate.confidence,
+                },
+            )
+            self._transition(
+                context,
+                estimate.state,
+                reason=f"pending_timeout_observed_acceptable:{target_state}",
+            )
+            context.pending_transition = {}
+            return True
         self._logs.run_event(
             context.run_id,
             "transition_timeout_broad_scan",
@@ -639,6 +712,22 @@ class RunExecutor:
             },
         )
         return self._maybe_relocalize(context, plan, estimate, tick)
+
+    def _acceptable_targets_for_pending(
+        self,
+        *,
+        source_node: Any | None,
+        primary_target: str,
+    ) -> list[str]:
+        out: list[str] = []
+        if primary_target:
+            out.append(primary_target)
+        if source_node is not None and getattr(source_node, "expected_next", None):
+            for s in source_node.expected_next:
+                s2 = str(s).strip()
+                if s2 and s2 not in out:
+                    out.append(s2)
+        return out
 
     def _state_scan_interval_seconds(self, context: RunContext, node_wait_seconds: float) -> float:
         default_seconds = max(1.1, float(node_wait_seconds))
