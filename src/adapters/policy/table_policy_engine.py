@@ -104,46 +104,8 @@ class TablePolicyEngine(PolicyEnginePort):
                 context_id=node.context_id,
             )
 
-        if estimate.confidence < 0.4:
-            low_conf_key = f"_state_low_conf:{current_state}"
-            low_conf_ticks = int(context.retries.get(low_conf_key, 0)) + 1
-            context.retries[low_conf_key] = low_conf_ticks
-            waited_seconds = low_conf_ticks * max(0.1, node.wait_seconds)
-            if node.action is None:
-                stuck_timeout_seconds = self._state_stuck_timeout_seconds(context)
-                if waited_seconds >= stuck_timeout_seconds:
-                    return PolicyDecision(
-                        kind="fail",
-                        error=f"state_stuck_no_signal:{current_state}:waited={round(waited_seconds, 1)}s",
-                        reason="state_stuck_no_signal",
-                        controller_id=node.controller_id,
-                        context_id=node.context_id,
-                    )
-            else:
-                # Action-bearing states: after waiting long enough, force-execute
-                # the action even under low confidence. This prevents indefinite
-                # hangs on states like S_BOOTSTRAP that have no recognition rules.
-                force_timeout = self._action_force_timeout_seconds(context)
-                if waited_seconds >= force_timeout:
-                    context.retries.pop(low_conf_key, None)
-                    return PolicyDecision(
-                        kind="action",
-                        action=node.action,
-                        next_state=node.next_state,
-                        controller_id=node.action.controller_id or node.controller_id,
-                        context_id=node.action.required_context or node.context_id,
-                        reason=f"force_execute_low_confidence:waited={round(waited_seconds, 1)}s",
-                    )
-            return PolicyDecision(
-                kind="wait",
-                reason=f"low_confidence:{round(estimate.confidence, 3)}",
-                wait_seconds=max(0.1, node.wait_seconds),
-                controller_id=node.controller_id,
-                context_id=node.context_id,
-            )
-        context.retries.pop(f"_state_low_conf:{current_state}", None)
-
         if node.action is not None:
+            context.retries.pop(f"_state_low_conf:{current_state}", None)
             return PolicyDecision(
                 kind="action",
                 action=node.action,
@@ -152,6 +114,29 @@ class TablePolicyEngine(PolicyEnginePort):
                 context_id=node.action.required_context or node.context_id,
                 reason="execute_state_action",
             )
+
+        if estimate.confidence < 0.4:
+            low_conf_key = f"_state_low_conf:{current_state}"
+            low_conf_ticks = int(context.retries.get(low_conf_key, 0)) + 1
+            context.retries[low_conf_key] = low_conf_ticks
+            waited_seconds = low_conf_ticks * max(0.1, node.wait_seconds)
+            stuck_timeout_seconds = self._state_stuck_timeout_seconds(context)
+            if waited_seconds >= stuck_timeout_seconds:
+                return PolicyDecision(
+                    kind="fail",
+                    error=f"state_stuck_no_signal:{current_state}:waited={round(waited_seconds, 1)}s",
+                    reason="state_stuck_no_signal",
+                    controller_id=node.controller_id,
+                    context_id=node.context_id,
+                )
+            return PolicyDecision(
+                kind="wait",
+                reason=f"low_confidence:{round(estimate.confidence, 3)}",
+                wait_seconds=max(0.1, node.wait_seconds),
+                controller_id=node.controller_id,
+                context_id=node.context_id,
+            )
+        context.retries.pop(f"_state_low_conf:{current_state}", None)
 
         if node.next_state:
             return PolicyDecision(
@@ -179,19 +164,6 @@ class TablePolicyEngine(PolicyEnginePort):
         raw = effective_policy.get("state_stuck_timeout_seconds", default_seconds)
         try:
             return max(5.0, float(raw))
-        except Exception:
-            return default_seconds
-
-    def _action_force_timeout_seconds(self, context: RunContext) -> float:
-        """Timeout before force-executing an action despite low confidence."""
-        default_seconds = 8.0
-        manifest = context.manifest if isinstance(context.manifest, dict) else {}
-        effective_policy = manifest.get("effective_policy", {})
-        if not isinstance(effective_policy, dict):
-            return default_seconds
-        raw = effective_policy.get("action_force_timeout_seconds", default_seconds)
-        try:
-            return max(2.0, float(raw))
         except Exception:
             return default_seconds
 

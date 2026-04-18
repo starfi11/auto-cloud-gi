@@ -107,9 +107,78 @@ class RunExecutor:
             self._advance_scenario(context, plan, tick)
             if self._process_pending_transition(context, plan, tick):
                 continue
+            current_state = (context.state or "").strip()
+            if current_state in state_plan.terminal_states:
+                self._transition(context, str(Stage.NOTIFY_AND_ARCHIVE), reason="terminal_state_reached")
+                self._transition(context, str(Stage.FINISH), reason="run_completed")
+                return
+            current_node = state_plan.node_for(current_state, context.blackboard) if current_state else None
+            if current_node is None:
+                raise RuntimeError(f"unknown_state:{current_state or '<empty>'}")
+            # Optimistic execution model: action states execute immediately.
+            # State recognition is reserved for transition confirmation and
+            # fallback recovery paths, not for pre-action self-verification.
+            if current_node.action is not None:
+                decision = PolicyDecision(
+                    kind="action",
+                    action=current_node.action,
+                    next_state=current_node.next_state,
+                    controller_id=current_node.action.controller_id or current_node.controller_id,
+                    context_id=current_node.action.required_context or current_node.context_id,
+                    reason="execute_state_action_optimistic",
+                )
+                self._log_policy_decision(context, tick, current_state, decision)
+                self._ensure_decision_context(context, decision)
+                self._logs.replay_event(
+                    context.run_id,
+                    "decision",
+                    {
+                        "tick": tick,
+                        "state": current_state,
+                        "kind": decision.kind,
+                        "reason": decision.reason,
+                        "next_state": decision.next_state,
+                        "context_id": decision.context_id or context.active_context_id,
+                        "controller_id": decision.controller_id,
+                        "action": {
+                            "name": decision.action.name,
+                            "kind": decision.action.kind,
+                        },
+                    },
+                )
+                step = decision.action.to_step()
+                stage = self.STEP_STAGE_MAP.get(step.kind)
+                if stage:
+                    self._transition(context, str(stage), reason=f"intent:{step.name}")
+                self._run_step(context, step)
+                acting_state = current_state
+                reentry_key = f"_action_done:{acting_state}"
+                context.retries[reentry_key] = int(context.retries.get(reentry_key, 0)) + 1
+                if decision.next_state:
+                    self._create_pending_transition(
+                        plan=plan,
+                        context=context,
+                        source_state=acting_state,
+                        target_state=decision.next_state,
+                        reason=f"action_success:{step.name}",
+                        step=step,
+                    )
+                continue
+            now = perf_counter()
+            observe_interval = self._state_scan_interval_seconds(context, current_node.wait_seconds)
+            scan_state_key = "_regular_scan_state"
+            scan_next_key = "_regular_scan_next_at"
+            if context.retries.get(scan_state_key) != current_state:
+                context.retries[scan_state_key] = current_state
+                context.retries[scan_next_key] = 0.0
+            next_scan_at = float(context.retries.get(scan_next_key, 0.0))
+            if now < next_scan_at:
+                sleep(min(0.2, max(0.01, next_scan_at - now)))
+                continue
             expected = self._expected_states_for_scan(context, plan)
             tick_t0 = perf_counter()
             estimate = self._state_estimator.estimate(context, plan, expected_states=expected)
+            context.retries[scan_next_key] = perf_counter() + observe_interval
             estimate_ms = round((perf_counter() - tick_t0) * 1000.0, 1)
             # L3 soft-lost: narrow-scan low confidence 3 ticks → force one
             # broad scan. L4 relocalize: if broad scan then still returns a
@@ -389,7 +458,16 @@ class RunExecutor:
         node = sp.node_for(current, context.blackboard)
         if node is None or node.expected_next is None:
             return None
-        out = [current]
+
+        # Action states should not continuously OCR-scan successor states.
+        # We only need "am I still in current state?" before issuing action;
+        # successor observation is handled by pending_transition processing.
+        # This keeps steady-state tick cost low and avoids launch-stage stalls
+        # when expected_next carries heavy OCR recognition.
+        if node.action is not None:
+            return [current]
+
+        out: list[str] = []
         for s in node.expected_next:
             if s not in out:
                 out.append(s)
@@ -410,6 +488,15 @@ class RunExecutor:
         timeout_seconds = max(settle_seconds + 0.2, float(step.params.get("transition_timeout_seconds", 15.0)))
         require_observed = bool(step.params.get("transition_require_observed", False))
         required_observed_ticks = max(1, int(step.params.get("transition_observed_ticks", 2)))
+        observe_interval_seconds = max(
+            1.1,
+            float(
+                step.params.get(
+                    "transition_observe_interval_seconds",
+                    step.params.get("text_poll_seconds", 1.2),
+                )
+            ),
+        )
         auto_downgraded_observed = False
         if require_observed:
             target_node = plan.state_plan.node_for(target_state, context.blackboard) if plan.state_plan is not None else None
@@ -429,6 +516,8 @@ class RunExecutor:
             "require_observed": require_observed,
             "required_observed_ticks": required_observed_ticks,
             "observed_ticks": 0,
+            "observe_interval_seconds": observe_interval_seconds,
+            "next_observe_at": now + settle_seconds,
         }
         self._logs.run_event(
             context.run_id,
@@ -441,6 +530,7 @@ class RunExecutor:
                 "timeout_seconds": timeout_seconds,
                 "require_observed": require_observed,
                 "required_observed_ticks": required_observed_ticks,
+                "observe_interval_seconds": observe_interval_seconds,
                 "auto_downgraded_observed": auto_downgraded_observed,
             },
         )
@@ -458,6 +548,8 @@ class RunExecutor:
         now = perf_counter()
         deadline = float(pending.get("deadline", now + 0.2))
         if now > deadline:
+            if self._recover_from_transition_timeout(context, plan, tick, target_state):
+                return True
             raise RuntimeError(
                 "transition_timeout:"
                 f"{pending.get('source_state', '')}->{target_state},"
@@ -465,45 +557,43 @@ class RunExecutor:
             )
 
         require_observed = bool(pending.get("require_observed", False))
-        if self._state_estimator is not None:
-            # During a pending transition we only care whether we've arrived
-            # at target_state (or are still sitting in source_state). Narrow
-            # scan to those two states to keep OCR cost low.
-            pending_expected: list[str] | None = [target_state]
-            src = str(pending.get("source_state", "")).strip()
-            if src and src not in pending_expected:
-                pending_expected.append(src)
-            estimate = self._state_estimator.estimate(
-                context, plan, expected_states=pending_expected
-            )
-            if estimate.state == target_state:
-                pending["observed_ticks"] = int(pending.get("observed_ticks", 0)) + 1
-            else:
-                pending["observed_ticks"] = 0
-
-            self._logs.replay_event(
-                context.run_id,
-                "transition_observe",
-                {
-                    "tick": tick,
-                    "pending_target_state": target_state,
-                    "observed_state": estimate.state,
-                    "observed_ticks": int(pending.get("observed_ticks", 0)),
-                    "required_observed_ticks": int(pending.get("required_observed_ticks", 1)),
-                    "require_observed": require_observed,
-                },
-            )
-
         not_before = float(pending.get("not_before", now))
         if now < not_before:
             sleep(0.05)
             return True
 
         if require_observed:
+            observe_interval = max(1.1, float(pending.get("observe_interval_seconds", 1.2)))
+            next_observe_at = float(pending.get("next_observe_at", not_before))
+            if now < next_observe_at:
+                sleep(min(0.2, max(0.01, next_observe_at - now)))
+                return True
+            if self._state_estimator is not None:
+                # Expected-only observation: only probe target_state.
+                estimate = self._state_estimator.estimate(context, plan, expected_states=[target_state])
+                if estimate.state == target_state:
+                    pending["observed_ticks"] = int(pending.get("observed_ticks", 0)) + 1
+                else:
+                    pending["observed_ticks"] = 0
+                pending["next_observe_at"] = now + observe_interval
+                self._logs.replay_event(
+                    context.run_id,
+                    "transition_observe",
+                    {
+                        "tick": tick,
+                        "pending_target_state": target_state,
+                        "observed_state": estimate.state,
+                        "observed_ticks": int(pending.get("observed_ticks", 0)),
+                        "required_observed_ticks": int(pending.get("required_observed_ticks", 1)),
+                        "require_observed": require_observed,
+                        "observe_interval_seconds": observe_interval,
+                        "expected_states": [target_state],
+                    },
+                )
             observed = int(pending.get("observed_ticks", 0))
             required = max(1, int(pending.get("required_observed_ticks", 1)))
             if observed < required:
-                sleep(0.05)
+                sleep(0.1)
                 return True
 
         self._transition(context, target_state, reason=str(pending.get("reason", "pending_transition_committed")))
@@ -519,6 +609,60 @@ class RunExecutor:
         )
         context.pending_transition = {}
         return True
+
+    def _recover_from_transition_timeout(
+        self,
+        context: RunContext,
+        plan: WorkflowPlan,
+        tick: int,
+        target_state: str,
+    ) -> bool:
+        if self._state_estimator is None:
+            return False
+        cooldown = self._recovery_broad_scan_cooldown_seconds(context)
+        now = perf_counter()
+        next_allowed = float(context.retries.get("_recovery_broad_scan_next_at", 0.0))
+        if now < next_allowed:
+            return False
+        context.retries["_recovery_broad_scan_next_at"] = now + cooldown
+        estimate = self._state_estimator.estimate(context, plan, expected_states=None)
+        self._logs.run_event(
+            context.run_id,
+            "transition_timeout_broad_scan",
+            {
+                "tick": tick,
+                "current_state": context.state,
+                "target_state": target_state,
+                "observed_state": estimate.state,
+                "confidence": estimate.confidence,
+                "cooldown_seconds": cooldown,
+            },
+        )
+        return self._maybe_relocalize(context, plan, estimate, tick)
+
+    def _state_scan_interval_seconds(self, context: RunContext, node_wait_seconds: float) -> float:
+        default_seconds = max(1.1, float(node_wait_seconds))
+        manifest = context.manifest if isinstance(context.manifest, dict) else {}
+        effective_policy = manifest.get("effective_policy", {})
+        if not isinstance(effective_policy, dict):
+            return default_seconds
+        raw = effective_policy.get("state_scan_interval_seconds", default_seconds)
+        try:
+            return max(1.1, float(raw))
+        except Exception:
+            return default_seconds
+
+    def _recovery_broad_scan_cooldown_seconds(self, context: RunContext) -> float:
+        default_seconds = 5.0
+        manifest = context.manifest if isinstance(context.manifest, dict) else {}
+        effective_policy = manifest.get("effective_policy", {})
+        if not isinstance(effective_policy, dict):
+            return default_seconds
+        raw = effective_policy.get("recovery_broad_scan_cooldown_seconds", default_seconds)
+        try:
+            return max(1.0, float(raw))
+        except Exception:
+            return default_seconds
 
     def _log_policy_decision(self, context: RunContext, tick: int, state: str, decision: PolicyDecision) -> None:
         payload: dict[str, Any] = {

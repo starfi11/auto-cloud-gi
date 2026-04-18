@@ -8,7 +8,7 @@ from src.kernel.context_store import RunContext
 
 
 class TablePolicyEngineTest(unittest.TestCase):
-    def test_low_confidence_returns_wait(self) -> None:
+    def test_action_state_executes_even_under_low_confidence(self) -> None:
         engine = TablePolicyEngine()
         plan = WorkflowPlan(
             profile="p",
@@ -29,8 +29,8 @@ class TablePolicyEngineTest(unittest.TestCase):
         )
         ctx = RunContext(run_id="r", manifest={}, state="S1")
         decision = engine.decide(ctx, plan, StateEstimate(state="S1", confidence=0.2))
-        self.assertEqual(decision.kind, "wait")
-        self.assertIn("low_confidence", decision.reason)
+        self.assertEqual(decision.kind, "action")
+        self.assertEqual(decision.action.name, "a")
 
     def test_guard_selects_phase_action(self) -> None:
         # Two nodes share state S_MENU; policy should pick the one whose

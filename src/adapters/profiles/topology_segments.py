@@ -36,6 +36,9 @@ def build_cloud_segment(
         "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 60.0)),
         "transition_require_observed": bool(override.get("transition_require_observed", True)),
         "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
+        "transition_observe_interval_seconds": max(
+            1.1, float(override.get("transition_observe_interval_seconds", 1.2))
+        ),
     }
 
     # 文档语义：启动后可能直接在首页，也可能先弹每日奖励。
@@ -101,7 +104,7 @@ def build_cloud_segment(
     queue_wait_params = {
         "scene": "queue_wait",
         "timeout_seconds": float(override.get("queue_wait_timeout_seconds", 300.0)),
-        "text_poll_seconds": float(override.get("queue_wait_poll_seconds", 0.5)),
+        "text_poll_seconds": max(1.1, float(override.get("queue_wait_poll_seconds", 1.2))),
         "ready_element_id": "cloud_door_enter",
         "ready_element_profile": "genshin_cloud",
         "element_poll_window_seconds": float(override.get("queue_wait_element_poll_window_seconds", 1.0)),
@@ -111,7 +114,7 @@ def build_cloud_segment(
     in_game_wait_params = {
         "scene": "in_game",
         "timeout_seconds": float(override.get("in_game_wait_timeout_seconds", 120.0)),
-        "text_poll_seconds": float(override.get("in_game_wait_poll_seconds", 0.4)),
+        "text_poll_seconds": max(1.1, float(override.get("in_game_wait_poll_seconds", 1.2))),
         "ready_element_id": "cloud_ingame_bag_icon",
         "ready_element_profile": "genshin_cloud",
         "element_poll_window_seconds": float(override.get("in_game_element_poll_window_seconds", 0.8)),
@@ -355,6 +358,9 @@ def build_btgi_segment(
         "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 60.0)),
         "transition_require_observed": bool(override.get("transition_require_observed", True)),
         "transition_observed_ticks": int(override.get("transition_observed_ticks", 2)),
+        "transition_observe_interval_seconds": max(
+            1.1, float(override.get("transition_observe_interval_seconds", 1.2))
+        ),
     }
 
     launch_focus_steps = [
