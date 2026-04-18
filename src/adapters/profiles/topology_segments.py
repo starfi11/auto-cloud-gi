@@ -135,7 +135,7 @@ def build_cloud_segment(
             context_id="genshin_window",
             next_state="S_CLOUD_DAILY_REWARD",
             stable_ticks=1,
-            expected_next=("S_CLOUD_DAILY_REWARD",),
+            expected_next=("S_CLOUD_DAILY_REWARD", "S_CLOUD_HOME"),
             recoverability="safe_reentry",
         ),
         StateNode(
@@ -178,7 +178,7 @@ def build_cloud_segment(
             context_id="genshin_window",
             next_state="S_CLOUD_QUEUE_SELECT",
             stable_ticks=1,
-            expected_next=("S_CLOUD_QUEUE_SELECT",),
+            expected_next=("S_CLOUD_QUEUE_SELECT", "S_CLOUD_QUEUE_WAIT", "S_CLOUD_DOOR"),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {"present": "cloud_start_game_button"},
@@ -253,7 +253,7 @@ def build_cloud_segment(
             context_id="genshin_window",
             next_state="S_CLOUD_KONGYUE",
             stable_ticks=1,
-            expected_next=("S_CLOUD_KONGYUE",),
+            expected_next=("S_CLOUD_KONGYUE", "S_CLOUD_IN_GAME_WAIT", "S_CLOUD_IN_GAME"),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {"present": "cloud_door_enter"},
@@ -398,7 +398,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_UPDATE_POPUP",
             stable_ticks=1,
-            expected_next=("S_BTGI_UPDATE_POPUP",),
+            expected_next=("S_BTGI_UPDATE_POPUP", "S_BTGI_HOME"),
             recoverability="safe_reentry",
         ),
         StateNode(
@@ -419,7 +419,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_HOME",
             stable_ticks=1,
-            expected_next=("S_BTGI_HOME",),
+            expected_next=("S_BTGI_UPDATE_POPUP", "S_BTGI_HOME"),
             recognition={
                 "profile": "bettergi",
                 "expr": {
@@ -450,7 +450,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_CAPTURE_WAIT",
             stable_ticks=1,
-            expected_next=("S_BTGI_CAPTURE_WAIT",),
+            expected_next=("S_BTGI_CAPTURE_WAIT", "S_BTGI_ONE_DRAGON_PAGE"),
             recognition={
                 "profile": "bettergi",
                 "expr": {
@@ -482,7 +482,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_ONE_DRAGON_PAGE",
             stable_ticks=1,
-            expected_next=("S_BTGI_ONE_DRAGON_PAGE",),
+            expected_next=("S_BTGI_ONE_DRAGON_PAGE", "S_BTGI_ONE_DRAGON_STARTED"),
             recognition={
                 "profile": "bettergi",
                 "expr": {"present": "btgi_capture_select_window"},
@@ -507,7 +507,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_ONE_DRAGON_STARTED",
             stable_ticks=1,
-            expected_next=("S_BTGI_ONE_DRAGON_STARTED",),
+            expected_next=("S_BTGI_ONE_DRAGON_STARTED", "S_BTGI_DONE"),
             recognition={
                 "profile": "bettergi",
                 "expr": {
