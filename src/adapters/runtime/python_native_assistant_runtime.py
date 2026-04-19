@@ -124,6 +124,9 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
         steps = list(options.get("launch_macro_steps", []))
         skip_start = bool(options.get("skip_start_process", False))
         ensure_foreground = bool(options.get("ensure_foreground", True))
+        # Start-process phase can tolerate temporary focus miss; dismiss phase
+        # (skip_start_process=True) must be foreground to avoid ineffective clicks.
+        require_foreground = bool(options.get("require_foreground", skip_start))
 
         evidence_refs: list[str] = []
         if skip_start:
@@ -134,6 +137,13 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
                 mp = self._processes.register("assistant", proc)
                 evidence_refs.append(f"exe:{exe}")
                 evidence_refs.append(f"pid:{mp.pid}")
+                launch_wait = float(
+                    options.get("assistant_launch_wait_seconds")
+                    or os.getenv("BETTERGI_LAUNCH_WAIT_SECONDS", "15")
+                )
+                if launch_wait > 0:
+                    time.sleep(max(0.0, launch_wait))
+                    evidence_refs.append(f"launch_wait:{round(launch_wait, 2)}s")
             except Exception as exc:
                 return {
                     "ok": False,
@@ -159,7 +169,7 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
                 timeout_seconds=float(options.get("foreground_timeout_seconds", 3.0)),
             )
             evidence_refs.append(f"focus:{fg_detail}")
-            if not ok_fg:
+            if not ok_fg and require_foreground:
                 return {
                     "ok": False,
                     "retryable": True,
