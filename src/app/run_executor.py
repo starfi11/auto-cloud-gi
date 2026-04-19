@@ -6,7 +6,7 @@ from typing import Callable, Any, Protocol
 
 from src.domain.scenario import advance_scenario
 from src.domain.stages import Stage
-from src.domain.state_kernel import PolicyDecision
+from src.domain.state_kernel import PolicyDecision, StateEstimate
 from src.domain.workflow import WorkflowPlan, WorkflowStep
 from src.kernel.context_store import RunContext
 from src.kernel.context_manager import ContextManager
@@ -97,7 +97,7 @@ class RunExecutor:
         if state_plan is None:
             raise RuntimeError("state_driven mode missing state_plan")
 
-        self._transition(context, str(Stage.LOAD_POLICY), reason="state_plan_ready")
+        self._logs.run_event(context.run_id, "state_plan_ready", {"mode": "state_driven"})
         self._emit_runtime_probe(context)
         if context.state in {"", "BOOTSTRAP", str(Stage.LOAD_POLICY)}:
             self._transition(context, state_plan.initial_state, reason="state_plan_initial_state")
@@ -110,8 +110,11 @@ class RunExecutor:
                 continue
             current_state = (context.state or "").strip()
             if current_state in state_plan.terminal_states:
-                self._transition(context, str(Stage.NOTIFY_AND_ARCHIVE), reason="terminal_state_reached")
-                self._transition(context, str(Stage.FINISH), reason="run_completed")
+                self._logs.run_event(
+                    context.run_id,
+                    "state_driven_completed",
+                    {"terminal_state": current_state, "reason": "terminal_state_reached"},
+                )
                 return
             current_node = state_plan.node_for(current_state, context.blackboard) if current_state else None
             if current_node is None:
@@ -148,9 +151,6 @@ class RunExecutor:
                     },
                 )
                 step = decision.action.to_step()
-                stage = self.STEP_STAGE_MAP.get(step.kind)
-                if stage:
-                    self._transition(context, str(stage), reason=f"intent:{step.name}")
                 self._run_step(context, step)
                 acting_state = current_state
                 reentry_key = f"_action_done:{acting_state}"
@@ -171,94 +171,14 @@ class RunExecutor:
                     )
                 tick += 1
                 continue
-            now = perf_counter()
-            observe_interval = self._state_scan_interval_seconds(context, current_node.wait_seconds)
-            scan_state_key = "_regular_scan_state"
-            scan_next_key = "_regular_scan_next_at"
-            if context.retries.get(scan_state_key) != current_state:
-                context.retries[scan_state_key] = current_state
-                context.retries[scan_next_key] = 0.0
-            next_scan_at = float(context.retries.get(scan_next_key, 0.0))
-            if now < next_scan_at:
-                sleep(min(0.2, max(0.01, next_scan_at - now)))
-                continue
-            expected = self._expected_states_for_scan(context, plan)
-            tick_t0 = perf_counter()
-            estimate = self._state_estimator.estimate(context, plan, expected_states=expected)
-            context.retries[scan_next_key] = perf_counter() + observe_interval
-            estimate_ms = round((perf_counter() - tick_t0) * 1000.0, 1)
-            # L3 soft-lost: narrow-scan low confidence 3 ticks → force one
-            # broad scan. L4 relocalize: if broad scan then still returns a
-            # confident non-current state, snap current_state to it even when
-            # we'd normally refuse (mid-action, off-expected_next). This is
-            # the escape hatch for unannounced drift — e.g. a popup stole
-            # focus and none of the planned successors match.
-            if expected is not None:
-                if estimate.confidence < 0.4:
-                    narrow_low = int(context.retries.get("_narrow_scan_low", 0)) + 1
-                    context.retries["_narrow_scan_low"] = narrow_low
-                    if narrow_low >= 3:
-                        context.retries["_narrow_scan_low"] = 0
-                        estimate = self._state_estimator.estimate(context, plan, expected_states=None)
-                        self._logs.run_event(
-                            context.run_id,
-                            "narrow_scan_fallback_broad",
-                            {"tick": tick, "current_state": context.state},
-                        )
-                        if self._maybe_relocalize(context, plan, estimate, tick):
-                            tick += 1
-                            continue
-                else:
-                    context.retries["_narrow_scan_low"] = 0
-            self._logs.run_event(
-                context.run_id,
-                "state_estimated",
-                {
-                    "tick": tick,
-                    "state": estimate.state,
-                    "confidence": estimate.confidence,
-                    "signals": estimate.signals,
-                    "estimate_ms": estimate_ms,
-                    "expected_states": expected,
-                    "uncertainty_reason": estimate.uncertainty_reason,
-                    "perception_top_confidence": (
-                        estimate.perception.top_confidence if estimate.perception is not None else None
-                    ),
-                    "perception_candidates": (
-                        [
-                            {
-                                "label": c.label,
-                                "confidence": c.confidence,
-                                "kind": c.kind,
-                                "meta": c.meta,
-                            }
-                            for c in estimate.perception.candidates
-                        ]
-                        if estimate.perception is not None
-                        else []
-                    ),
-                    "evidence_refs": (estimate.perception.evidence_refs if estimate.perception is not None else []),
-                },
-            )
-            self._logs.replay_event(
-                context.run_id,
-                "sense",
-                {
-                    "tick": tick,
-                    "state": estimate.state,
-                    "confidence": estimate.confidence,
-                    "context_id": context.active_context_id,
-                    "uncertainty_reason": estimate.uncertainty_reason,
-                    "evidence_refs": (estimate.perception.evidence_refs if estimate.perception is not None else []),
-                    "candidates": (
-                        [
-                            {"label": c.label, "confidence": c.confidence, "kind": c.kind}
-                            for c in estimate.perception.candidates
-                        ]
-                        if estimate.perception is not None
-                        else []
-                    ),
-                },
+            # No regular OCR in the optimistic model. Outside pending
+            # transitions we trust the current business state and let policy
+            # drive deterministic wait/transition behavior.
+            estimate = StateEstimate(
+                state=current_state,
+                confidence=1.0,
+                signals={"source": "optimistic_context"},
+                uncertainty_reason="",
             )
 
             decision = self._policy_engine.decide(context, plan, estimate)
@@ -287,8 +207,11 @@ class RunExecutor:
             )
 
             if decision.kind == "finish":
-                self._transition(context, str(Stage.NOTIFY_AND_ARCHIVE), reason=decision.reason or "policy_finish")
-                self._transition(context, str(Stage.FINISH), reason="run_completed")
+                self._logs.run_event(
+                    context.run_id,
+                    "state_driven_completed",
+                    {"terminal_state": context.state, "reason": decision.reason or "policy_finish"},
+                )
                 return
 
             if decision.kind == "fail":
@@ -310,9 +233,6 @@ class RunExecutor:
                 if decision.action is None:
                     raise RuntimeError("policy_action_missing_action")
                 step = decision.action.to_step()
-                stage = self.STEP_STAGE_MAP.get(step.kind)
-                if stage:
-                    self._transition(context, str(stage), reason=f"intent:{step.name}")
                 self._run_step(context, step)
                 # Track that the *acting* state's action has executed (for
                 # re-entry detection). Must use context.state — the state the
@@ -459,45 +379,6 @@ class RunExecutor:
                 "scenario_goal_changed",
                 {"tick": tick, "from": before, "to": after, "done": after is None},
             )
-
-    def _expected_states_for_scan(
-        self, context: RunContext, plan: WorkflowPlan
-    ) -> list[str] | None:
-        """Derive narrow-scan candidate list from context.state.
-
-        Returns None for broad scan when:
-          - current state is unknown / missing
-          - current node is not in the plan
-          - current node is a hub (expected_next is None)
-        """
-        current = (context.state or "").strip()
-        if not current:
-            return None
-        sp = plan.state_plan
-        if sp is None:
-            return None
-        node = sp.node_for(current, context.blackboard)
-        if node is None or node.expected_next is None:
-            return None
-
-        # Action states should not continuously OCR-scan successor states.
-        # We only need "am I still in current state?" before issuing action;
-        # successor observation is handled by pending_transition processing.
-        # This keeps steady-state tick cost low and avoids launch-stage stalls
-        # when expected_next carries heavy OCR recognition.
-        if node.action is not None:
-            return [current]
-
-        out: list[str] = []
-        # Observation-only states should still verify their own recognition
-        # before transitioning out; otherwise a non-recognizing successor can
-        # cause context-fallback and blind transition.
-        if node.action is None and node.recognition:
-            out.append(current)
-        for s in node.expected_next:
-            if s not in out:
-                out.append(s)
-        return out
 
     def _create_pending_transition(
         self,
@@ -743,18 +624,6 @@ class RunExecutor:
                 if s2 not in out:
                     out.append(s2)
         return out
-
-    def _state_scan_interval_seconds(self, context: RunContext, node_wait_seconds: float) -> float:
-        default_seconds = max(1.1, float(node_wait_seconds))
-        manifest = context.manifest if isinstance(context.manifest, dict) else {}
-        effective_policy = manifest.get("effective_policy", {})
-        if not isinstance(effective_policy, dict):
-            return default_seconds
-        raw = effective_policy.get("state_scan_interval_seconds", default_seconds)
-        try:
-            return max(1.1, float(raw))
-        except Exception:
-            return default_seconds
 
     def _recovery_broad_scan_cooldown_seconds(self, context: RunContext) -> float:
         default_seconds = 5.0

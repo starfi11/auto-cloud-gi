@@ -74,8 +74,8 @@ class StateDrivenKernelTest(unittest.TestCase):
             executor.execute(ctx, plan)
 
             self.assertEqual(runtime.calls, ["a", "b"])
-            self.assertEqual(ctx.state, "FINISH")
-            self.assertEqual(ctx.layered_state.global_layer.state, "FINISH")
+            self.assertEqual(ctx.state, "S_DONE")
+            self.assertEqual(ctx.layered_state.global_layer.state, "S_DONE")
 
     def test_pending_transition_accepts_alternative_expected_target(self) -> None:
         with TemporaryDirectory() as td:
@@ -135,7 +135,7 @@ class StateDrivenKernelTest(unittest.TestCase):
             executor.execute(ctx, plan)
 
             self.assertEqual(runtime.calls, ["a", "c"])
-            self.assertEqual(ctx.state, "FINISH")
+            self.assertEqual(ctx.state, "S_DONE")
 
 
 if __name__ == "__main__":

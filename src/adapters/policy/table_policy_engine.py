@@ -12,7 +12,6 @@ class TablePolicyEngine(PolicyEnginePort):
         if state_plan is None:
             return PolicyDecision(kind="fail", error="missing_state_plan", reason="state_plan_required")
 
-        observed_state = estimate.state
         current_state = context.state or state_plan.initial_state
         if current_state in state_plan.terminal_states:
             return PolicyDecision(kind="finish", reason="terminal_state_reached")
@@ -24,70 +23,6 @@ class TablePolicyEngine(PolicyEnginePort):
                 error=f"unknown_state:{current_state}",
                 reason="state_not_in_plan",
             )
-
-        # Recognizer-driven transition is allowed only in observation states (no bound action).
-        # Action states must execute their action first, otherwise we may skip critical side effects.
-        can_sync_by_observation = current_node.action is None
-        # Narrow-scan under expected_next removes cross-state phantoms, so we
-        # can trust lower-confidence signals. Previously 0.75 was chosen to
-        # guard against the all/kof partial-match 0.45 cap interacting with
-        # broad scan noise; both are gone now.
-        observation_sync_threshold = 0.6
-        if can_sync_by_observation and observed_state != current_state and observed_state:
-            observed_node = state_plan.node_for(observed_state, context.blackboard)
-            if observed_state in state_plan.terminal_states and estimate.confidence >= observation_sync_threshold:
-                return PolicyDecision(kind="finish", reason="terminal_state_observed")
-            if observed_node is not None and estimate.confidence >= observation_sync_threshold:
-                # Prevent infinite re-entry to an action state that already executed.
-                # If we just came from that state (its action ran and brought us here),
-                # require a cooldown before syncing back to it.
-                reentry_key = f"_action_done:{observed_state}"
-                reentry_count = int(context.retries.get(reentry_key, 0))
-                max_reentries = self._max_state_reentries(context)
-                if observed_node.action is not None and reentry_count > 0:
-                    if reentry_count >= max_reentries:
-                        return PolicyDecision(
-                            kind="fail",
-                            error=f"state_reentry_limit:{observed_state}:count={reentry_count}",
-                            reason="state_reentry_limit_exceeded",
-                            controller_id=observed_node.controller_id,
-                            context_id=observed_node.context_id,
-                        )
-                    # Require extra settling ticks proportional to reentry count
-                    # to give the screen more time to change after a click.
-                    extra_settle = reentry_count * max(2, int(observed_node.stable_ticks))
-                    seen_key = f"_observed_seen:{observed_state}"
-                    seen = int(context.retries.get(seen_key, 0)) + 1
-                    context.retries[seen_key] = seen
-                    required_seen = max(1, int(observed_node.stable_ticks)) + extra_settle
-                    if seen < required_seen:
-                        return PolicyDecision(
-                            kind="wait",
-                            reason=f"observed_state_reentry_settling:{seen}/{required_seen}:reentry={reentry_count}",
-                            wait_seconds=max(0.1, observed_node.wait_seconds),
-                            controller_id=observed_node.controller_id,
-                            context_id=observed_node.context_id,
-                        )
-
-                seen_key = f"_observed_seen:{observed_state}"
-                seen = int(context.retries.get(seen_key, 0)) + 1
-                context.retries[seen_key] = seen
-                required_seen = max(1, int(observed_node.stable_ticks))
-                if seen < required_seen:
-                    return PolicyDecision(
-                        kind="wait",
-                        reason=f"observed_state_settling:{seen}/{required_seen}",
-                        wait_seconds=max(0.05, observed_node.wait_seconds),
-                        controller_id=observed_node.controller_id,
-                        context_id=observed_node.context_id,
-                    )
-                return PolicyDecision(
-                    kind="transition",
-                    next_state=observed_state,
-                    controller_id=observed_node.controller_id,
-                    context_id=observed_node.context_id,
-                    reason="observed_state_sync",
-                )
 
         node = current_node
 
@@ -166,16 +101,3 @@ class TablePolicyEngine(PolicyEnginePort):
             return max(5.0, float(raw))
         except Exception:
             return default_seconds
-
-    def _max_state_reentries(self, context: RunContext) -> int:
-        """Max times an action state can be re-entered via observation sync."""
-        default = 3
-        manifest = context.manifest if isinstance(context.manifest, dict) else {}
-        effective_policy = manifest.get("effective_policy", {})
-        if not isinstance(effective_policy, dict):
-            return default
-        raw = effective_policy.get("max_state_reentries", default)
-        try:
-            return max(1, int(raw))
-        except Exception:
-            return default
