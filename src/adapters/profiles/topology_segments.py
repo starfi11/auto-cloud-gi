@@ -472,7 +472,14 @@ def build_btgi_segment(
                     "op": "all",
                     "items": [
                         {"present": "btgi_update_popup"},
-                        {"present": "btgi_update_ignore_button"},
+                        {
+                            "op": "any",
+                            "items": [
+                                {"present": "btgi_update_ignore_button"},
+                                {"present": "btgi_update_cancel_button"},
+                                {"present": "btgi_update_bottom_fallback_button"},
+                            ],
+                        },
                     ],
                 },
             },
