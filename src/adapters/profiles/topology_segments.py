@@ -469,7 +469,7 @@ def build_btgi_segment(
             recognition={
                 "profile": "bettergi",
                 "expr": {
-                    "op": "any",
+                    "op": "all",
                     "items": [
                         {"present": "btgi_update_popup"},
                         {"present": "btgi_update_ignore_button"},
@@ -500,9 +500,8 @@ def build_btgi_segment(
             recognition={
                 "profile": "bettergi",
                 "expr": {
-                    "op": "any",
+                    "op": "all",
                     "items": [
-                        {"present": "btgi_home"},
                         {"present": "btgi_home_title"},
                         {"present": "btgi_home_subtitle"},
                     ],
@@ -557,7 +556,7 @@ def build_btgi_segment(
             recognition={
                 "profile": "bettergi",
                 "expr": {
-                    "op": "any",
+                    "op": "all",
                     "items": [
                         {"present": "btgi_task_list"},
                         {"present": "btgi_config_label"},

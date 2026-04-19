@@ -11,7 +11,6 @@ def launch_macro_update_ignore() -> list[dict[str, Any]]:
             "element_profile": "bettergi",
             "timeout_seconds": 2.5,
             "poll_seconds": 0.2,
-            "optional": True,
             "after_sleep": 0.4,
         }
     ]
