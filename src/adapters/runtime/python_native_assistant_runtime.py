@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ctypes
 import os
 import subprocess
+import time
 from typing import Any
 
 from src.adapters.action_specs import one_dragon_drive_macro
@@ -19,6 +21,95 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _activate_window_windows(
+    *,
+    pid: int = 0,
+    title_keywords: tuple[str, ...] = (),
+    timeout_seconds: float = 2.5,
+) -> tuple[bool, str]:
+    if os.name != "nt":
+        return True, "non_windows_skip"
+    user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+    get_window_text_length = user32.GetWindowTextLengthW
+    get_window_text = user32.GetWindowTextW
+    is_window_visible = user32.IsWindowVisible
+    enum_windows = user32.EnumWindows
+    get_window_thread_process_id = user32.GetWindowThreadProcessId
+    show_window = user32.ShowWindow
+    set_foreground_window = user32.SetForegroundWindow
+    bring_window_to_top = user32.BringWindowToTop
+    get_foreground_window = user32.GetForegroundWindow
+    attach_thread_input = user32.AttachThreadInput
+    get_current_thread_id = kernel32.GetCurrentThreadId
+    get_window_thread_process_id.restype = ctypes.c_uint
+    SW_RESTORE = 9
+
+    wanted_keywords = tuple(k.lower() for k in title_keywords if k.strip())
+    deadline = time.monotonic() + max(0.5, float(timeout_seconds))
+    last_detail = "window_not_found"
+
+    while time.monotonic() <= deadline:
+        candidates: list[tuple[int, str, int]] = []
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+        def _enum_cb(hwnd, _lparam):
+            try:
+                if not is_window_visible(hwnd):
+                    return True
+                title_len = int(get_window_text_length(hwnd))
+                if title_len <= 0:
+                    return True
+                buf = ctypes.create_unicode_buffer(title_len + 1)
+                get_window_text(hwnd, buf, title_len + 1)
+                title = str(buf.value or "").strip()
+                if not title:
+                    return True
+                pid_ref = ctypes.c_uint(0)
+                get_window_thread_process_id(hwnd, ctypes.byref(pid_ref))
+                win_pid = int(pid_ref.value)
+                title_l = title.lower()
+                title_ok = (not wanted_keywords) or any(k in title_l for k in wanted_keywords)
+                pid_ok = (pid <= 0) or (win_pid == pid)
+                if title_ok and pid_ok:
+                    candidates.append((int(hwnd), title, win_pid))
+            except Exception:
+                return True
+            return True
+
+        enum_windows(_enum_cb, 0)
+        if not candidates:
+            last_detail = "window_not_found"
+            time.sleep(0.2)
+            continue
+
+        for hwnd, title, win_pid in candidates:
+            try:
+                show_window(hwnd, SW_RESTORE)
+                bring_window_to_top(hwnd)
+                fg = int(get_foreground_window())
+                fg_tid = int(get_window_thread_process_id(fg, None)) if fg else 0
+                target_tid = int(get_window_thread_process_id(hwnd, None))
+                current_tid = int(get_current_thread_id())
+                if fg_tid and target_tid and fg_tid != current_tid:
+                    attach_thread_input(current_tid, fg_tid, True)
+                    attach_thread_input(current_tid, target_tid, True)
+                set_foreground_window(hwnd)
+                if fg_tid and target_tid and fg_tid != current_tid:
+                    attach_thread_input(current_tid, target_tid, False)
+                    attach_thread_input(current_tid, fg_tid, False)
+                time.sleep(0.08)
+                current_fg = int(get_foreground_window())
+                if current_fg == hwnd:
+                    return True, f"window_activated:{title}:{win_pid}"
+                last_detail = f"window_not_foreground:{title}:{win_pid}"
+            except Exception as exc:
+                last_detail = f"window_activate_error:{type(exc).__name__}:{exc}"
+        time.sleep(0.2)
+    return False, last_detail
+
+
 class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
     def __init__(self) -> None:
         backend_mode = os.getenv("UI_AUTOMATION_BACKEND", "auto")
@@ -32,6 +123,7 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
         exe = str(options.get("assistant_exe") or os.getenv("BETTERGI_EXE", "")).strip()
         steps = list(options.get("launch_macro_steps", []))
         skip_start = bool(options.get("skip_start_process", False))
+        ensure_foreground = bool(options.get("ensure_foreground", True))
 
         evidence_refs: list[str] = []
         if skip_start:
@@ -55,6 +147,25 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
                 "retryable": True,
                 "detail": "assistant_exe_not_configured",
             }
+
+        if ensure_foreground:
+            status = self._processes.status("assistant")
+            pid = int(status.get("pid", 0)) if bool(status.get("exists", False)) else 0
+            raw_keywords = str(options.get("assistant_window_keywords") or os.getenv("BETTERGI_WINDOW_KEYWORDS", "BetterGI"))
+            keywords = tuple(x.strip() for x in raw_keywords.split(",") if x.strip())
+            ok_fg, fg_detail = _activate_window_windows(
+                pid=pid,
+                title_keywords=keywords,
+                timeout_seconds=float(options.get("foreground_timeout_seconds", 3.0)),
+            )
+            evidence_refs.append(f"focus:{fg_detail}")
+            if not ok_fg:
+                return {
+                    "ok": False,
+                    "retryable": True,
+                    "detail": fg_detail,
+                    "evidence_refs": evidence_refs,
+                }
 
         if steps:
             r = self._driver.dismiss_update_if_present(steps)
