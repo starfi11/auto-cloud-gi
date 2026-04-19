@@ -30,6 +30,7 @@ def launch_macro_update_ignore() -> list[dict[str, Any]]:
             "poll_seconds": 0.25,
             "clicks": 2,
             "after_sleep": 0.4,
+            "optional": True,
         }
     ]
 
