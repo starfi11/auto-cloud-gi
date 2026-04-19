@@ -7,12 +7,11 @@ def launch_macro_update_ignore() -> list[dict[str, Any]]:
     return [
         {
             "op": "click_element",
-            "element_id": "btgi_update_ignore_button",
+            "element_id": "btgi_update_cancel_template",
             "element_profile": "bettergi",
-            "timeout_seconds": 3.5,
+            "timeout_seconds": 4.0,
             "poll_seconds": 0.2,
             "after_sleep": 0.4,
-            "optional": True,
         },
         {
             "op": "click_element",

@@ -130,6 +130,13 @@
       "matchers": [{"kind": "text_ocr", "text_any": ["不再提示", "忽略"]}]
     },
     {
+      "id": "btgi_update_cancel_template",
+      "profile": "bettergi",
+      "roi": [900, 740, 360, 190],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "template", "template_key": "btgi_update_cancel_button", "confidence": 0.88}]
+    },
+    {
       "id": "btgi_update_cancel_button",
       "profile": "bettergi",
       "roi": [940, 760, 300, 150],
