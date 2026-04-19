@@ -253,7 +253,7 @@ def build_cloud_segment(
             context_id="genshin_window",
             next_state="S_CLOUD_KONGYUE",
             stable_ticks=1,
-            expected_next=("S_CLOUD_KONGYUE", "S_CLOUD_IN_GAME_WAIT", "S_CLOUD_IN_GAME"),
+            expected_next=("S_CLOUD_KONGYUE", "S_CLOUD_IN_GAME_WAIT"),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {"present": "cloud_door_enter"},
@@ -419,7 +419,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_HOME",
             stable_ticks=1,
-            expected_next=("S_BTGI_UPDATE_POPUP", "S_BTGI_HOME"),
+            expected_next=("S_BTGI_HOME",),
             recognition={
                 "profile": "bettergi",
                 "expr": {

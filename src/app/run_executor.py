@@ -164,6 +164,7 @@ class RunExecutor:
                         acceptable_targets=self._acceptable_targets_for_pending(
                             source_node=current_node,
                             primary_target=decision.next_state,
+                            source_state=acting_state,
                         ),
                         reason=f"action_success:{step.name}",
                         step=step,
@@ -334,6 +335,7 @@ class RunExecutor:
                         acceptable_targets=self._acceptable_targets_for_pending(
                             source_node=acting_node,
                             primary_target=decision.next_state,
+                            source_state=acting_state,
                         ),
                         reason=f"action_success:{step.name}",
                         step=step,
@@ -487,6 +489,11 @@ class RunExecutor:
             return [current]
 
         out: list[str] = []
+        # Observation-only states should still verify their own recognition
+        # before transitioning out; otherwise a non-recognizing successor can
+        # cause context-fallback and blind transition.
+        if node.action is None and node.recognition:
+            out.append(current)
         for s in node.expected_next:
             if s not in out:
                 out.append(s)
@@ -718,14 +725,22 @@ class RunExecutor:
         *,
         source_node: Any | None,
         primary_target: str,
+        source_state: str | None = None,
     ) -> list[str]:
         out: list[str] = []
         if primary_target:
             out.append(primary_target)
+        source = (source_state or "").strip()
         if source_node is not None and getattr(source_node, "expected_next", None):
             for s in source_node.expected_next:
                 s2 = str(s).strip()
-                if s2 and s2 not in out:
+                if not s2:
+                    continue
+                # Don't treat "stay in source state" as successful transition;
+                # otherwise pending may commit to self and loop forever.
+                if source and s2 == source:
+                    continue
+                if s2 not in out:
                     out.append(s2)
         return out
 
