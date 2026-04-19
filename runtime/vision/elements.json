@@ -125,21 +125,21 @@
     {
       "id": "btgi_update_ignore_button",
       "profile": "bettergi",
-      "roi": [980, 760, 420, 140],
+      "roi": [700, 760, 300, 150],
       "base_size": [1600, 900],
       "matchers": [{"kind": "text_ocr", "text_any": ["不再提示", "忽略"]}]
     },
     {
       "id": "btgi_update_cancel_button",
       "profile": "bettergi",
-      "roi": [760, 760, 360, 160],
+      "roi": [940, 760, 300, 150],
       "base_size": [1600, 900],
       "matchers": [{"kind": "text_ocr", "text_any": ["取消", "下次再说", "稍后", "以后再说"]}]
     },
     {
       "id": "btgi_update_bottom_fallback_button",
       "profile": "bettergi",
-      "roi": [520, 700, 640, 220],
+      "roi": [640, 720, 560, 220],
       "base_size": [1600, 900],
       "matchers": [{"kind": "text_ocr", "text_any": ["不再提示", "忽略", "取消", "下次再说", "稍后", "以后再说"]}]
     },

@@ -9,7 +9,7 @@ def launch_macro_update_ignore() -> list[dict[str, Any]]:
             "op": "click_element",
             "element_id": "btgi_update_ignore_button",
             "element_profile": "bettergi",
-            "timeout_seconds": 3.0,
+            "timeout_seconds": 3.5,
             "poll_seconds": 0.2,
             "after_sleep": 0.4,
             "optional": True,
@@ -18,7 +18,7 @@ def launch_macro_update_ignore() -> list[dict[str, Any]]:
             "op": "click_element",
             "element_id": "btgi_update_cancel_button",
             "element_profile": "bettergi",
-            "timeout_seconds": 3.0,
+            "timeout_seconds": 3.5,
             "poll_seconds": 0.2,
             "after_sleep": 0.4,
             "optional": True,
@@ -27,8 +27,9 @@ def launch_macro_update_ignore() -> list[dict[str, Any]]:
             "op": "click_element",
             "element_id": "btgi_update_bottom_fallback_button",
             "element_profile": "bettergi",
-            "timeout_seconds": 6.0,
+            "timeout_seconds": 8.0,
             "poll_seconds": 0.25,
+            "clicks": 2,
             "after_sleep": 0.4,
         }
     ]
