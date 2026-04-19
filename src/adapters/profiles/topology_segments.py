@@ -455,6 +455,7 @@ def build_btgi_segment(
                 params={
                     "assistant": "bettergi",
                     "skip_start_process": True,
+                    "require_foreground": False,
                     "launch_macro_steps": update_ignore_steps,
                     **shared_btgi,
                 },
@@ -609,7 +610,13 @@ def build_btgi_segment(
         WorkflowStep(
             name="dismiss_btgi_update",
             kind="assistant.launch",
-            params={"assistant": "bettergi", "skip_start_process": True, "launch_macro_steps": update_ignore_steps, **shared_btgi},
+            params={
+                "assistant": "bettergi",
+                "skip_start_process": True,
+                "require_foreground": False,
+                "launch_macro_steps": update_ignore_steps,
+                **shared_btgi,
+            },
         ),
         WorkflowStep(
             name="prepare_capture_dropdown",
