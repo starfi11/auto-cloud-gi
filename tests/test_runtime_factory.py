@@ -22,6 +22,7 @@ class RuntimeFactoryTest(unittest.TestCase):
             scheduler_mode="noop",
             notify_mode="stdout",
             runtime_dir="./runtime",
+            control_api_repo_dir=".",
         )
 
     def test_build_noop_runtimes(self) -> None:

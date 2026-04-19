@@ -11,6 +11,7 @@ def run_control_api(
     *,
     token: str = "",
     runtime_dir: str = "./runtime",
+    repo_dir: str = ".",
     frontend_dir: str | None = None,
 ) -> None:
     """Legacy entry point preserved for backwards compatibility.
@@ -24,5 +25,6 @@ def run_control_api(
         orchestrator=orchestrator,
         token=token,
         runtime_dir=runtime_dir,
+        repo_dir=repo_dir,
         frontend_dir=frontend_dir,
     )

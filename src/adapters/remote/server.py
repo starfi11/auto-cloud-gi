@@ -157,6 +157,7 @@ def run_remote_server(
     *,
     token: str,
     runtime_dir: str,
+    repo_dir: str = ".",
     frontend_dir: str | None = None,
 ) -> None:
     auth = TokenAuth(token=token)
@@ -164,6 +165,7 @@ def run_remote_server(
         orchestrator=orchestrator,
         auth=auth,
         runtime_dir=Path(runtime_dir),
+        repo_dir=Path(repo_dir),
         frontend_dir=Path(frontend_dir) if frontend_dir else None,
     )
     router = build_router(context)

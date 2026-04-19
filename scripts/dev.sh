@@ -49,6 +49,7 @@ Commands:
   test [extra-args]         .venv/bin/python -m unittest discover -s tests [args]
 
   health                    GET /api/v1/health
+  pull [branch]             POST /api/v1/system/git/pull (origin + optional branch)
   runs [status]             List runs; optional status filter
 
   start [profile] [scenario] [trigger]
@@ -95,6 +96,14 @@ EOF
 cmd_test() { exec "$PY" -m unittest discover -s tests "$@"; }
 
 cmd_health() { "${CTL[@]}" health; }
+cmd_pull() {
+  local branch="${1:-}"
+  if [[ -n "$branch" ]]; then
+    "${CTL[@]}" pull --branch "$branch"
+  else
+    "${CTL[@]}" pull
+  fi
+}
 
 cmd_runs() {
   if [[ -n "${1:-}" ]]; then
@@ -213,6 +222,7 @@ main() {
     env)        cmd_env       "$@" ;;
     test)       cmd_test      "$@" ;;
     health)     cmd_health    "$@" ;;
+    pull)       cmd_pull      "$@" ;;
     runs)       cmd_runs      "$@" ;;
     start)      cmd_start     "$@" ;;
     dry)        cmd_dry       "$@" ;;

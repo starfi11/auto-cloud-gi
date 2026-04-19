@@ -45,6 +45,7 @@ class Settings:
     scheduler_mode: str
     notify_mode: str
     runtime_dir: str
+    control_api_repo_dir: str
 
     @staticmethod
     def from_env() -> "Settings":
@@ -66,4 +67,5 @@ class Settings:
             scheduler_mode=os.getenv("SCHEDULER_MODE", "noop"),
             notify_mode=os.getenv("NOTIFY_MODE", "stdout"),
             runtime_dir=os.getenv("RUNTIME_DIR", "./runtime"),
+            control_api_repo_dir=os.getenv("CONTROL_API_REPO_DIR", "."),
         )

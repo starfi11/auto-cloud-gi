@@ -24,6 +24,7 @@ def main() -> None:
         orchestrator=orchestrator,
         token=settings.control_api_token,
         runtime_dir=settings.runtime_dir,
+        repo_dir=settings.control_api_repo_dir,
         frontend_dir=settings.control_api_frontend_dir or None,
     )
 

@@ -20,4 +20,5 @@ class RemoteContext:
     orchestrator: Orchestrator
     auth: TokenAuth
     runtime_dir: Path
+    repo_dir: Path
     frontend_dir: Path | None = None

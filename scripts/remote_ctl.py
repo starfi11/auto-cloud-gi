@@ -11,6 +11,7 @@ Config via env:
 
 Usage:
   scripts/remote_ctl.py health
+  scripts/remote_ctl.py pull [--branch BRANCH]
   scripts/remote_ctl.py runs [--status running]
   scripts/remote_ctl.py show <run_id> [--include summary,diagnostics]
   scripts/remote_ctl.py start --idem KEY [--profile P] [--scenario S] [--dry-run]
@@ -102,6 +103,15 @@ def _emit(status: int, payload: Any) -> int:
 def cmd_health(_args: argparse.Namespace) -> int:
     status, payload, _ = _request("GET", "/api/v1/health")
     return _emit(status, payload or {"status": status})
+
+
+def cmd_pull(args: argparse.Namespace) -> int:
+    body: dict[str, Any] = {"remote": "origin"}
+    branch = (args.branch or "").strip()
+    if branch:
+        body["branch"] = branch
+    status, payload, _ = _request("POST", "/api/v1/system/git/pull", body=body)
+    return _emit(status, payload)
 
 
 def cmd_runs(args: argparse.Namespace) -> int:
@@ -215,6 +225,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("health").set_defaults(func=cmd_health)
+    sp = sub.add_parser("pull", help="run remote git pull origin [branch]")
+    sp.add_argument("--branch", default="", help="optional branch name")
+    sp.set_defaults(func=cmd_pull)
 
     sp = sub.add_parser("runs", help="list runs")
     sp.add_argument("--status", default="", help="filter by status (optional)")
