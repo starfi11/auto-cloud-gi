@@ -105,7 +105,7 @@ def build_cloud_segment(
         "scene": "queue_wait",
         "timeout_seconds": float(override.get("queue_wait_timeout_seconds", 300.0)),
         "text_poll_seconds": max(1.1, float(override.get("queue_wait_poll_seconds", 1.2))),
-        "ready_element_id": "cloud_door_enter",
+        "ready_element_id": "cloud_door_icon",
         "ready_element_profile": "genshin_cloud",
         "element_poll_window_seconds": float(override.get("queue_wait_element_poll_window_seconds", 1.0)),
         **shared_genshin,
@@ -178,10 +178,26 @@ def build_cloud_segment(
             context_id="genshin_window",
             next_state="S_CLOUD_QUEUE_SELECT",
             stable_ticks=1,
-            expected_next=("S_CLOUD_QUEUE_SELECT", "S_CLOUD_QUEUE_WAIT", "S_CLOUD_DOOR"),
+            expected_next=(
+                "S_CLOUD_QUEUE_SELECT",
+                "S_CLOUD_QUEUE_WAIT",
+                "S_CLOUD_DOOR",
+            ),
             recognition={
                 "profile": "genshin_cloud",
-                "expr": {"present": "cloud_start_game_button"},
+                "expr": {
+                    "op": "any",
+                    "items": [
+                        {"present": "cloud_start_game_button"},
+                        {
+                            "op": "all",
+                            "items": [
+                                {"present": "cloud_start_game_button"},
+                                {"present": "cloud_home_genshin_logo"},
+                            ],
+                        },
+                    ],
+                },
             },
             recoverability="safe_reentry",
         ),
@@ -198,7 +214,7 @@ def build_cloud_segment(
             context_id="genshin_window",
             next_state="S_CLOUD_QUEUE_WAIT",
             stable_ticks=1,
-            expected_next=("S_CLOUD_QUEUE_WAIT",),
+            expected_next=("S_CLOUD_QUEUE_WAIT", "S_CLOUD_DOOR"),
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {
@@ -256,7 +272,19 @@ def build_cloud_segment(
             expected_next=("S_CLOUD_KONGYUE", "S_CLOUD_IN_GAME_WAIT"),
             recognition={
                 "profile": "genshin_cloud",
-                "expr": {"present": "cloud_door_enter"},
+                "expr": {
+                    "op": "any",
+                    "items": [
+                        {"present": "cloud_door_enter"},
+                        {
+                            "op": "all",
+                            "items": [
+                                {"present": "cloud_door_enter"},
+                                {"present": "cloud_door_icon"},
+                            ],
+                        },
+                    ],
+                },
             },
             recoverability="safe_reentry",
         ),
@@ -296,7 +324,19 @@ def build_cloud_segment(
             expected_next=("S_CLOUD_IN_GAME",),
             recognition={
                 "profile": "genshin_cloud",
-                "expr": {"present": "cloud_ingame_bag_icon"},
+                "expr": {
+                    "op": "any",
+                    "items": [
+                        {"present": "cloud_ingame_bag_icon"},
+                        {
+                            "op": "all",
+                            "items": [
+                                {"present": "cloud_ingame_bag_icon"},
+                                {"present": "cloud_uid_text"},
+                            ],
+                        },
+                    ],
+                },
             },
             recoverability="safe_reentry",
         ),
@@ -311,10 +351,16 @@ def build_cloud_segment(
             recognition={
                 "profile": "genshin_cloud",
                 "expr": {
-                    "op": "all",
+                    "op": "any",
                     "items": [
                         {"present": "cloud_ingame_bag_icon"},
-                        {"present": "cloud_uid_text"},
+                        {
+                            "op": "all",
+                            "items": [
+                                {"present": "cloud_ingame_bag_icon"},
+                                {"present": "cloud_uid_text"},
+                            ],
+                        },
                     ],
                 },
             },
@@ -450,7 +496,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_CAPTURE_WAIT",
             stable_ticks=1,
-            expected_next=("S_BTGI_CAPTURE_WAIT", "S_BTGI_ONE_DRAGON_PAGE"),
+            expected_next=("S_BTGI_CAPTURE_WAIT",),
             recognition={
                 "profile": "bettergi",
                 "expr": {
@@ -482,7 +528,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_ONE_DRAGON_PAGE",
             stable_ticks=1,
-            expected_next=("S_BTGI_ONE_DRAGON_PAGE", "S_BTGI_ONE_DRAGON_STARTED"),
+            expected_next=("S_BTGI_ONE_DRAGON_PAGE",),
             recognition={
                 "profile": "bettergi",
                 "expr": {"present": "btgi_capture_select_window"},
@@ -507,7 +553,7 @@ def build_btgi_segment(
             context_id="bettergi_panel",
             next_state="S_BTGI_ONE_DRAGON_STARTED",
             stable_ticks=1,
-            expected_next=("S_BTGI_ONE_DRAGON_STARTED", "S_BTGI_DONE"),
+            expected_next=("S_BTGI_ONE_DRAGON_STARTED",),
             recognition={
                 "profile": "bettergi",
                 "expr": {
