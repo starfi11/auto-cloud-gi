@@ -115,6 +115,12 @@ def adjust_capture_and_open_one_dragon_macro() -> list[dict[str, Any]]:
             "after_sleep": 2.0,
         },
         {
+            "op": "focus_window",
+            "title_keywords": "更好的原神",
+            "timeout_seconds": 2.0,
+            "after_sleep": 0.4,
+        },
+        {
             "op": "click_element",
             "element_id": "btgi_one_dragon_entry",
             "element_profile": "bettergi",

@@ -8,6 +8,7 @@ from typing import Any, Protocol
 
 from src.adapters.perception.element_resolver import ElementResolver
 from src.adapters.vision import TemplateStore
+from src.adapters.runtime.window_focus import activate_window
 from src.ports.element_resolver_port import ElementResolverPort
 
 
@@ -338,6 +339,29 @@ class UiMacroExecutor:
                         continue
                     self._backend.hotkey(*keys)
                     results.append(MacroStepResult(op=op, ok=True, detail=f"hotkey:{'+'.join(keys)}"))
+                    self._after(step)
+                    continue
+                if op == "focus_window":
+                    raw_keywords = step.get("title_keywords", "")
+                    keywords: tuple[str, ...]
+                    if isinstance(raw_keywords, (list, tuple)):
+                        keywords = tuple(str(x).strip() for x in raw_keywords if str(x).strip())
+                    else:
+                        keywords = tuple(
+                            x.strip() for x in str(raw_keywords).split(",") if x.strip()
+                        )
+                    ok, detail = activate_window(
+                        pid=int(step.get("pid", 0) or 0),
+                        title_keywords=keywords,
+                        timeout_seconds=float(step.get("timeout_seconds", 1.8)),
+                    )
+                    if not ok:
+                        if bool(step.get("optional", False)):
+                            results.append(MacroStepResult(op=op, ok=True, detail=f"focus_optional_miss:{detail}"))
+                            continue
+                        results.append(MacroStepResult(op=op, ok=False, detail=f"focus_failed:{detail}"))
+                        continue
+                    results.append(MacroStepResult(op=op, ok=True, detail=f"focus:{detail}"))
                     self._after(step)
                     continue
                 if op == "wait_template":
