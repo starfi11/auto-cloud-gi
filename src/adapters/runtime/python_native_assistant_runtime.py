@@ -153,6 +153,21 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
                 "detail": "assistant_exe_not_configured",
             }
 
+        # Soft foreground attempt: try to bring BetterGI front, but never fail
+        # the step here. Final success is still determined by macro execution
+        # and state transition observation.
+        if bool(options.get("soft_activate", True)):
+            status = self._processes.status("assistant")
+            pid = int(status.get("pid", 0)) if bool(status.get("exists", False)) else 0
+            raw_keywords = str(options.get("assistant_window_keywords") or os.getenv("BETTERGI_WINDOW_KEYWORDS", "BetterGI"))
+            keywords = tuple(x.strip() for x in raw_keywords.split(",") if x.strip())
+            _ok_fg, fg_detail = _activate_window_windows(
+                pid=pid,
+                title_keywords=keywords,
+                timeout_seconds=float(options.get("foreground_timeout_seconds", 1.8)),
+            )
+            evidence_refs.append(f"focus:{fg_detail}")
+
         if steps:
             r = self._driver.dismiss_update_if_present(steps)
             mr = list(r.get("macro_results", []))
