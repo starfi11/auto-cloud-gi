@@ -74,45 +74,11 @@ def prepare_capture_dropdown_macro() -> list[dict[str, Any]]:
     return [
         {
             "op": "click_element",
-            "element_id": "btgi_screenshot_dropdown_settings",
+            "element_id": "btgi_screenshoter_start",
             "element_profile": "bettergi",
             "timeout_seconds": 12.0,
-            "poll_seconds": 0.25,
-            "after_sleep": 0.3,
-        },
-        {"op": "hotkey", "keys": ["end"], "after_sleep": 0.1},
-        {"op": "hotkey", "keys": ["ctrl", "end"], "after_sleep": 0.1},
-        {"op": "scroll", "amount": -600, "after_sleep": 0.2},
-        {
-            "op": "click_element",
-            "element_id": "btgi_dropdown_arrow",
-            "element_profile": "bettergi",
-            "timeout_seconds": 10.0,
-            "poll_seconds": 0.25,
-            "after_sleep": 0.5,
-        },
-        {"op": "hotkey", "keys": ["enter"], "after_sleep": 0.4},
-    ]
-
-
-def adjust_capture_and_open_one_dragon_macro() -> list[dict[str, Any]]:
-    return [
-        {
-            "op": "click_element",
-            "element_id": "btgi_capture_select_window",
-            "element_profile": "bettergi",
-            "timeout_seconds": 8.0,
             "poll_seconds": 0.2,
             "after_sleep": 1.0,
-        },
-        {
-            "op": "click_element",
-            "element_id": "btgi_capture_target_genshin",
-            "element_profile": "bettergi",
-            "clicks": 2,
-            "timeout_seconds": 12.0,
-            "poll_seconds": 0.25,
-            "after_sleep": 2.0,
         },
         {
             "op": "focus_window",
@@ -120,6 +86,11 @@ def adjust_capture_and_open_one_dragon_macro() -> list[dict[str, Any]]:
             "timeout_seconds": 2.0,
             "after_sleep": 0.4,
         },
+    ]
+
+
+def adjust_capture_and_open_one_dragon_macro() -> list[dict[str, Any]]:
+    return [
         {
             "op": "click_element",
             "element_id": "btgi_one_dragon_entry",

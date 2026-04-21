@@ -541,7 +541,13 @@ def build_btgi_segment(
             expected_next=("S_BTGI_ONE_DRAGON_PAGE",),
             recognition={
                 "profile": "bettergi",
-                "expr": {"present": "btgi_capture_select_window"},
+                "expr": {
+                    "op": "all",
+                    "items": [
+                        {"present": "btgi_home_title"},
+                        {"present": "btgi_home_subtitle"},
+                    ],
+                },
             },
             recoverability="safe_reentry",
         ),

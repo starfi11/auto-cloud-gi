@@ -172,6 +172,13 @@
       "matchers": [{"kind": "template", "template_key": "btgi_screenshot_dropdown_settings", "confidence": 0.9}]
     },
     {
+      "id": "btgi_screenshoter_start",
+      "profile": "bettergi",
+      "roi": [380, 180, 860, 560],
+      "base_size": [1600, 900],
+      "matchers": [{"kind": "template", "template_key": "btgi_screenshoter_start", "confidence": 0.88}]
+    },
+    {
       "id": "btgi_dropdown_arrow",
       "profile": "bettergi",
       "roi": [1150, 430, 360, 230],
