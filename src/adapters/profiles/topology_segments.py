@@ -400,6 +400,8 @@ def build_btgi_segment(
         "required_context": "bettergi_panel",
         "controller_id": "bettergi_controller",
         "required_resources": ["mouse", "keyboard", "focus"],
+        "assistant_window_keywords": str(override.get("assistant_window_keywords", "更好的原神")),
+        "focus_require_pid": bool(override.get("focus_require_pid", False)),
         "transition_settle_seconds": float(override.get("transition_settle_seconds", 2.0)),
         "transition_timeout_seconds": float(override.get("transition_timeout_seconds", 60.0)),
         "transition_require_observed": bool(override.get("transition_require_observed", True)),

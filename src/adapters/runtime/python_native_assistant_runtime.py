@@ -70,10 +70,15 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
         if focus_mode != "off":
             status = self._processes.status("assistant")
             pid = int(status.get("pid", 0)) if bool(status.get("exists", False)) else 0
-            raw_keywords = str(options.get("assistant_window_keywords") or os.getenv("BETTERGI_WINDOW_KEYWORDS", "BetterGI"))
+            raw_keywords = str(
+                options.get("assistant_window_keywords")
+                or os.getenv("BETTERGI_WINDOW_KEYWORDS", "更好的原神")
+            )
             keywords = tuple(x.strip() for x in raw_keywords.split(",") if x.strip())
+            require_pid = bool(options.get("focus_require_pid", False))
+            focus_pid = pid if require_pid else 0
             ok_fg, fg_detail = activate_window(
-                pid=pid,
+                pid=focus_pid,
                 title_keywords=keywords,
                 timeout_seconds=float(options.get("foreground_timeout_seconds", 1.8)),
             )
