@@ -8,6 +8,7 @@ dependencies = [
   "paddleocr==3.3.3",
   "paddlepaddle==3.2.0",
   "dxcam>=0.0.5 ; sys_platform == 'win32'",
+  "pywin32>=306 ; sys_platform == 'win32'",
 ]
 
 [project.scripts]

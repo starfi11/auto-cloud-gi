@@ -411,7 +411,6 @@ def build_btgi_segment(
 
     launch_focus_steps = [
         {"op": "sleep", "seconds": float(override.get("btgi_launch_wait_seconds", 10.0))},
-        {"op": "hotkey", "keys": ["alt", "tab"], "after_sleep": 0.6},
     ]
     update_ignore_steps = launch_macro_update_ignore()
     prepare_dropdown_steps = prepare_capture_dropdown_macro()
@@ -436,7 +435,7 @@ def build_btgi_segment(
             action=ActionIntent(
                 name="launch_bettergi",
                 kind="assistant.launch",
-                params={"assistant": "bettergi", "launch_macro_steps": launch_focus_steps, **shared_btgi},
+                params={"assistant": "bettergi", "focus_mode": "soft", "launch_macro_steps": launch_focus_steps, **shared_btgi},
                 controller_id="bettergi_controller",
                 required_context="bettergi_panel",
             ),
@@ -455,7 +454,7 @@ def build_btgi_segment(
                 params={
                     "assistant": "bettergi",
                     "skip_start_process": True,
-                    "require_foreground": False,
+                    "focus_mode": "required",
                     "launch_macro_steps": update_ignore_steps,
                     **shared_btgi,
                 },
@@ -494,6 +493,7 @@ def build_btgi_segment(
                 params={
                     "assistant": "bettergi",
                     "skip_start_process": True,
+                    "focus_mode": "required",
                     "launch_macro_steps": prepare_dropdown_steps,
                     **shared_btgi,
                 },
@@ -525,6 +525,7 @@ def build_btgi_segment(
                 params={
                     "assistant": "bettergi",
                     "skip_start_process": True,
+                    "focus_mode": "required",
                     "launch_macro_steps": adjust_capture_steps,
                     **shared_btgi,
                 },
@@ -550,6 +551,7 @@ def build_btgi_segment(
                 params={
                     "assistant": "bettergi",
                     "skip_start_process": True,
+                    "focus_mode": "required",
                     "launch_macro_steps": start_one_dragon_steps,
                     **shared_btgi,
                 },
@@ -605,7 +607,7 @@ def build_btgi_segment(
         WorkflowStep(
             name="launch_bettergi",
             kind="assistant.launch",
-            params={"assistant": "bettergi", "launch_macro_steps": launch_focus_steps, **shared_btgi},
+            params={"assistant": "bettergi", "focus_mode": "soft", "launch_macro_steps": launch_focus_steps, **shared_btgi},
         ),
         WorkflowStep(
             name="dismiss_btgi_update",
@@ -613,7 +615,7 @@ def build_btgi_segment(
             params={
                 "assistant": "bettergi",
                 "skip_start_process": True,
-                "require_foreground": False,
+                "focus_mode": "required",
                 "launch_macro_steps": update_ignore_steps,
                 **shared_btgi,
             },
@@ -621,17 +623,17 @@ def build_btgi_segment(
         WorkflowStep(
             name="prepare_capture_dropdown",
             kind="assistant.launch",
-            params={"assistant": "bettergi", "skip_start_process": True, "launch_macro_steps": prepare_dropdown_steps, **shared_btgi},
+            params={"assistant": "bettergi", "skip_start_process": True, "focus_mode": "required", "launch_macro_steps": prepare_dropdown_steps, **shared_btgi},
         ),
         WorkflowStep(
             name="adjust_capture_and_open_one_dragon",
             kind="assistant.launch",
-            params={"assistant": "bettergi", "skip_start_process": True, "launch_macro_steps": adjust_capture_steps, **shared_btgi},
+            params={"assistant": "bettergi", "skip_start_process": True, "focus_mode": "required", "launch_macro_steps": adjust_capture_steps, **shared_btgi},
         ),
         WorkflowStep(
             name="start_one_dragon",
             kind="assistant.launch",
-            params={"assistant": "bettergi", "skip_start_process": True, "launch_macro_steps": start_one_dragon_steps, **shared_btgi},
+            params={"assistant": "bettergi", "skip_start_process": True, "focus_mode": "required", "launch_macro_steps": start_one_dragon_steps, **shared_btgi},
         ),
         WorkflowStep(name="watch_one_dragon_until_idle", kind="assistant.drive", params=monitor_params),
     ]

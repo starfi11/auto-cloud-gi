@@ -59,7 +59,6 @@ def one_dragon_drive_macro() -> list[dict[str, Any]]:
             "after_sleep": 0.5,
         },
         {"op": "hotkey", "keys": ["enter"], "after_sleep": 0.4},
-        {"op": "hotkey", "keys": ["alt", "tab"], "after_sleep": 0.8},
         {
             "op": "click_element",
             "element_id": "btgi_one_click_start_button",
@@ -115,7 +114,6 @@ def adjust_capture_and_open_one_dragon_macro() -> list[dict[str, Any]]:
             "poll_seconds": 0.25,
             "after_sleep": 2.0,
         },
-        {"op": "hotkey", "keys": ["alt", "tab"], "after_sleep": 0.8},
         {
             "op": "click_element",
             "element_id": "btgi_one_dragon_entry",
