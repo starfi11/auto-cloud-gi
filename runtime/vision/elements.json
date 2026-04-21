@@ -33,7 +33,7 @@
       "profile": "genshin_cloud",
       "roi": [1180, 740, 360, 150],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["开始游戏", "进入游戏"]}]
+      "matchers": [{"kind": "template", "template_key": "cloud_start_game_button", "confidence": 0.88}]
     },
     {
       "id": "cloud_queue_normal_button",
@@ -75,7 +75,7 @@
       "profile": "genshin_cloud",
       "roi": [640, 760, 520, 190],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["点击进入", "点击进入游戏", "进入游戏", "进入"]}]
+      "matchers": [{"kind": "template", "template_key": "cloud_door_enter", "confidence": 0.88}]
     },
     {
       "id": "cloud_kongyue_reward_text",
@@ -127,21 +127,14 @@
       "profile": "bettergi",
       "roi": [700, 760, 300, 150],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["不再提示", "忽略"]}]
-    },
-    {
-      "id": "btgi_update_cancel_template",
-      "profile": "bettergi",
-      "roi": [900, 740, 360, 190],
-      "base_size": [1600, 900],
-      "matchers": [{"kind": "template", "template_key": "btgi_update_cancel_button", "confidence": 0.88}]
+      "matchers": [{"kind": "template", "template_key": "btgi_update_ignore_button", "confidence": 0.9}]
     },
     {
       "id": "btgi_update_cancel_button",
       "profile": "bettergi",
       "roi": [940, 760, 300, 150],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["取消", "下次再说", "稍后", "以后再说"]}]
+      "matchers": [{"kind": "template", "template_key": "btgi_update_cancel_button", "confidence": 0.9}]
     },
     {
       "id": "btgi_update_bottom_fallback_button",
@@ -204,14 +197,14 @@
       "profile": "bettergi",
       "roi": [420, 260, 980, 520],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["原神"]}]
+      "matchers": [{"kind": "template", "template_key": "btgi_capture_target_genshin", "confidence": 0.9}]
     },
     {
       "id": "btgi_one_dragon_entry",
       "profile": "bettergi",
       "roi": [420, 160, 360, 680],
       "base_size": [1600, 900],
-      "matchers": [{"kind": "text_ocr", "text_any": ["一条龙"]}]
+      "matchers": [{"kind": "template", "template_key": "btgi_one_dragon_entry", "confidence": 0.9}]
     },
     {
       "id": "btgi_task_list",

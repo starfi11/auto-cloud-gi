@@ -476,7 +476,7 @@ def build_btgi_segment(
                         {
                             "op": "any",
                             "items": [
-                                {"present": "btgi_update_cancel_template"},
+                                {"present": "btgi_update_ignore_button"},
                                 {"present": "btgi_update_cancel_button"},
                                 {"present": "btgi_update_bottom_fallback_button"},
                             ],
