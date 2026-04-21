@@ -123,11 +123,6 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
         exe = str(options.get("assistant_exe") or os.getenv("BETTERGI_EXE", "")).strip()
         steps = list(options.get("launch_macro_steps", []))
         skip_start = bool(options.get("skip_start_process", False))
-        ensure_foreground = bool(options.get("ensure_foreground", True))
-        # Start-process phase can tolerate temporary focus miss; dismiss phase
-        # (skip_start_process=True) must be foreground to avoid ineffective clicks.
-        require_foreground = bool(options.get("require_foreground", skip_start))
-
         evidence_refs: list[str] = []
         if skip_start:
             pass
@@ -157,25 +152,6 @@ class PythonNativeAssistantRuntimeAdapter(AssistantRuntimePort):
                 "retryable": True,
                 "detail": "assistant_exe_not_configured",
             }
-
-        if ensure_foreground:
-            status = self._processes.status("assistant")
-            pid = int(status.get("pid", 0)) if bool(status.get("exists", False)) else 0
-            raw_keywords = str(options.get("assistant_window_keywords") or os.getenv("BETTERGI_WINDOW_KEYWORDS", "BetterGI"))
-            keywords = tuple(x.strip() for x in raw_keywords.split(",") if x.strip())
-            ok_fg, fg_detail = _activate_window_windows(
-                pid=pid,
-                title_keywords=keywords,
-                timeout_seconds=float(options.get("foreground_timeout_seconds", 3.0)),
-            )
-            evidence_refs.append(f"focus:{fg_detail}")
-            if not ok_fg and require_foreground:
-                return {
-                    "ok": False,
-                    "retryable": True,
-                    "detail": fg_detail,
-                    "evidence_refs": evidence_refs,
-                }
 
         if steps:
             r = self._driver.dismiss_update_if_present(steps)
